@@ -1,0 +1,22 @@
+mode: ENFORCE
+on-lookup-failure: ALLOW
+existing-account-policy: REQUIRE_PASSWORD_ONCE
+handshake-timeout-seconds: 10
+# Verified premium players use their Mojang UUID instead of their offline UUID.
+# Premium UUID mode can orphan existing UUID-based inventories and plugin data; those are not migrated.
+use-premium-uuid: true
+debug: false
+mojang:
+  lookup-url: "https://api.minecraftservices.com/minecraft/profile/lookup/name/%s"
+  lookup-fallback-url: "https://api.mojang.com/users/profiles/minecraft/%s"
+  session-url: "https://sessionserver.mojang.com/session/minecraft/hasJoined"
+  global-lookups-per-10min: 400
+throttle:
+  per-ip-new-names-per-minute: 5
+  max-pending-handshakes-per-ip: 2
+messages:
+  name-reserved: "<red>This username belongs to a premium Minecraft account.\n<gray>If it's yours, sign in with your official account and reconnect.\nOtherwise, please choose a different username."
+  verify-failed: "<red>Couldn't verify your Minecraft session.\n<gray>Restart your launcher, make sure you're signed in, and try again."
+  lookup-unavailable: "<red>Authentication services are temporarily unavailable.\n<gray>Please try again in a minute."
+  account-conflict: "<red>This username is linked to a different Minecraft account.\n<gray>Please contact an administrator."
+  throttled: "<red>Too many connection attempts. Please wait a moment."
