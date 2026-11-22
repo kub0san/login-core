@@ -4,7 +4,7 @@ Project-specific agent instructions for **authmePAL** (Paper authentication plug
 
 ## Platform
 
-- **Server:** Paper 26.2. Not supported: versions outside range.
+- **Target/main server:** Paper **26.3** (Java 25). This is the production target. The **only local test server** is `C:\Tools\global-test-server-26.3` (Paper 26.3, Java 25, port **25566**, Craftwire + MCP bridges); use it for target testing. There is no local 1.21.11 server (retired 2026-11-23); older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
 - **Java:** 25 (toolchain). Emits Java 25 bytecode.
 - **Plugin name:** `authmePAL`. PacketEvents 2.13.0 (spigot) for handshake/session work.
 
@@ -12,8 +12,9 @@ Project-specific agent instructions for **authmePAL** (Paper authentication plug
 
 - Build: `./gradlew build`
 - Tests: `./gradlew test` (JUnit 5 present under src/test/java).
-- Run server: `./gradlew runServer` (minecraftVersion 26.2).
+- Run server: `./gradlew runServer` (currently pinned to `minecraftVersion("26.2")` in build.gradle.kts; bump to 26.3 to match the target before release).
 - Compile only: `./gradlew compileJava`.
+- Shared test server and Minecraft MCP usage: `../GLOBAL_TEST_SERVER.md` (the old `run/` dir was removed; copy the built jar into the global server's `plugins/`).
 
 ## Architecture
 
