@@ -32,7 +32,7 @@ Project-specific agent instructions for **authmePAL** (Paper authentication plug
 
 - Read AGENTS.md first (subagents start fresh).
 - mempalace: query before answering about prior decisions for authmePAL (if stored).
-- MCP usage (verbatim map: `.\TestServer.ps1 -Help`): Craftwire owns E2E (shared hub 7777; `list_instances` → `server_info`, bots, `gui_read`, `scenario_run`, `exceptions`, `logs`, `world_edit`, `server_eval`; green handshake ≠ pass); `TestServer.ps1` owns files/processes; minecraft-paper (WS 25575) / minecraft-developer (HTTP 25374, token in `plugins/DeveloperMCP/config.yml`) own live inspection; minecode (version-exact commands/data/SNBT) / minecraft-dev (source/mappings/mixin/JAR, `mojmap` for 26.x) own syntax/source; mempalace/context7/exa/caveman are memory/docs/web/compression, not server-specific.
+- MCP usage (summary; verbatim in `README.md` / `GLOBAL_TEST_SERVER.md` / `-Help`): Craftwire owns E2E (shared hub 7777; `list_instances` → `server_info`, bots, `gui_read`, `scenario_run`, `exceptions`, `logs`, `world_edit`, `server_eval`; green handshake ≠ pass); `TestServer.ps1` owns files/processes; minecraft-paper (WS 25575) / minecraft-developer (HTTP 25374, token in `plugins/DeveloperMCP/config.yml`) own live inspection; minecode (version-exact commands/data/SNBT) / minecraft-dev (source/mappings/mixin/JAR, `mojmap` for 26.x) own syntax/source; mempalace/context7/exa/caveman are memory/docs/web/compression, not server-specific.
 - For visual verification (HUD/GUI screenshots) on the global test server, start a hidden Craftwire **client** instance with `client_process start` — bots have no renderer and cannot screenshot. Procedure: `../shenanigans-core/docs/agents/craftwire-client-capture.md`.
 
 ## Orchestration loop control
