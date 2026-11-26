@@ -42,6 +42,10 @@ public final class Storage implements AutoCloseable {
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath.toAbsolutePath());
             try (Statement statement = connection.createStatement()) {
+                // Durability pragmas stay idempotent across restarts; they precede all DDL.
+                statement.execute("PRAGMA journal_mode=WAL");
+                statement.execute("PRAGMA busy_timeout=5000");
+                statement.execute("PRAGMA synchronous=NORMAL");
                 statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS links (
                         name_lower TEXT PRIMARY KEY,
@@ -160,17 +164,7 @@ public final class Storage implements AutoCloseable {
             throw new IllegalArgumentException("Unsupported classification: " + classification);
         }
         return submit(() -> {
-            int inserted;
-            try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO account_classification (name_lower, classification, set_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(name_lower) DO NOTHING
-                """)) {
-                statement.setString(1, normalizedName);
-                statement.setString(2, normalizedClassification);
-                statement.setLong(3, Instant.now().toEpochMilli());
-                inserted = statement.executeUpdate();
-            }
+            int inserted = insertClassification(normalizedName, normalizedClassification);
             if (inserted > 0) {
                 return ClassificationResult.SET;
             }
@@ -189,25 +183,41 @@ public final class Storage implements AutoCloseable {
     public CompletableFuture<Void> putLink(String name, String mojangUuid, String canonicalName, String source) {
         String normalized = normalize(name);
         return submit(() -> {
-            long now = Instant.now().toEpochMilli();
-            try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO links (name_lower, mojang_uuid, canonical_name, linked_at, last_verified_at, source)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(name_lower) DO UPDATE SET
-                    mojang_uuid = excluded.mojang_uuid,
-                    canonical_name = excluded.canonical_name,
-                    last_verified_at = excluded.last_verified_at,
-                    source = excluded.source
-                """)) {
-                statement.setString(1, normalized);
-                statement.setString(2, mojangUuid);
-                statement.setString(3, canonicalName);
-                statement.setLong(4, now);
-                statement.setLong(5, now);
-                statement.setString(6, source);
-                statement.executeUpdate();
-            }
+            writeLink(normalized, mojangUuid, canonicalName, source);
             return null;
+        });
+    }
+
+    /**
+     * Commits the write-once PREMIUM classification and the link in one transaction: a link
+     * failure (e.g. a duplicate premium UUID) rolls the classification back, so a failed
+     * persistence can never leave a lockout behind. False means a conflicting stored
+     * classification; SQL failures complete the future exceptionally.
+     */
+    public CompletableFuture<Boolean> commitPremiumIdentity(String name, String mojangUuid,
+                                                            String canonicalName, String source) {
+        String normalizedName = classificationKey(name);
+        return submit(() -> {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                if (insertClassification(normalizedName, "PREMIUM") == 0
+                    && !"PREMIUM".equals(storedClassification(normalizedName))) {
+                    connection.rollback();
+                    return false;
+                }
+                writeLink(normalizedName, mojangUuid, canonicalName, source);
+                connection.commit();
+                return true;
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw ex;
+            } catch (RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
         });
     }
 
@@ -268,6 +278,41 @@ public final class Storage implements AutoCloseable {
         try (Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return result.next() ? result.getInt(1) : 0;
+        }
+    }
+
+    private int insertClassification(String normalizedName, String classification) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO account_classification (name_lower, classification, set_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(name_lower) DO NOTHING
+            """)) {
+            statement.setString(1, normalizedName);
+            statement.setString(2, classification);
+            statement.setLong(3, Instant.now().toEpochMilli());
+            return statement.executeUpdate();
+        }
+    }
+
+    private void writeLink(String normalizedName, String mojangUuid, String canonicalName, String source)
+        throws SQLException {
+        long now = Instant.now().toEpochMilli();
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO links (name_lower, mojang_uuid, canonical_name, linked_at, last_verified_at, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(name_lower) DO UPDATE SET
+                mojang_uuid = excluded.mojang_uuid,
+                canonical_name = excluded.canonical_name,
+                last_verified_at = excluded.last_verified_at,
+                source = excluded.source
+            """)) {
+            statement.setString(1, normalizedName);
+            statement.setString(2, mojangUuid);
+            statement.setString(3, canonicalName);
+            statement.setLong(4, now);
+            statement.setLong(5, now);
+            statement.setString(6, source);
+            statement.executeUpdate();
         }
     }
 

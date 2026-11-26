@@ -25,6 +25,7 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("io.papermc.paper:paper-api:26.3.build.200-stable")
+    testImplementation("fr.xephi:authme-core:6.0.1")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.3:4.126.0")
     testImplementation("io.netty:netty-transport:4.1.72.Final")
     testImplementation("io.netty:netty-codec:4.1.72.Final")

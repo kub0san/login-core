@@ -60,7 +60,22 @@ public final class VerifiedSessions {
     }
 
     public Optional<VerifiedSession> consume(String name, InetSocketAddress remoteAddress) {
-        Optional<VerifiedSession> session = find(name, remoteAddress);
+        if (remoteAddress == null) {
+            return Optional.empty();
+        }
+        InetAddress inet = remoteAddress.getAddress();
+        return consume(name, inet == null ? remoteAddress.getHostString() : inet.getHostAddress());
+    }
+
+    public Optional<VerifiedSession> consume(String name, InetAddress remoteAddress) {
+        if (remoteAddress == null) {
+            return Optional.empty();
+        }
+        return consume(name, remoteAddress.getHostAddress());
+    }
+
+    private Optional<VerifiedSession> consume(String name, String remoteIp) {
+        Optional<VerifiedSession> session = find(name, remoteIp);
         session.ifPresent(verifiedSession -> remove(verifiedSession.connectionId()));
         return session;
     }

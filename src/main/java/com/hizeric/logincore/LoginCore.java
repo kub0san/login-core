@@ -123,6 +123,8 @@ public final class LoginCore extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Order is a shutdown drain: connection cleanup finishes before workers stop, and
+        // storage.close() is last because it waits for its single SQL worker to finish first.
         if (packetListener != null && PacketEvents.getAPI() != null) {
             PacketEvents.getAPI().getEventManager().unregisterListener(packetListener);
         }

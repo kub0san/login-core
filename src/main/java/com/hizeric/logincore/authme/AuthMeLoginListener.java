@@ -5,6 +5,8 @@ import fr.xephi.authme.events.RestoreSessionEvent;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -17,24 +19,45 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 public final class AuthMeLoginListener implements Listener {
 
     private final Plugin plugin;
-    private final AuthMeBridge authMeBridge;
     private final Storage storage;
     private final VerifiedSessions verifiedSessions;
     private final Consumer<String> onVerifiedLogin;
+    private final Consumer<String> grant;
+    private final Predicate<String> isRegistered;
+    private final BiPredicate<String, String> register;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public AuthMeLoginListener(Plugin plugin, AuthMeBridge authMeBridge, Storage storage,
                                VerifiedSessions verifiedSessions, Consumer<String> onVerifiedLogin) {
+        this(plugin, storage, verifiedSessions, onVerifiedLogin,
+            authMeBridge::forceLoginFromProxy, authMeBridge::isRegistered, authMeBridge::registerPlayer);
+    }
+
+    AuthMeLoginListener(Plugin plugin, Storage storage, VerifiedSessions verifiedSessions,
+                        Consumer<String> onVerifiedLogin, Consumer<String> grant) {
+        this(plugin, storage, verifiedSessions, onVerifiedLogin, grant, name -> true,
+            (name, password) -> true);
+    }
+
+    AuthMeLoginListener(Plugin plugin, Storage storage, VerifiedSessions verifiedSessions,
+                        Consumer<String> onVerifiedLogin, Consumer<String> grant,
+                        Predicate<String> isRegistered, BiPredicate<String, String> register) {
         this.plugin = plugin;
-        this.authMeBridge = authMeBridge;
         this.storage = storage;
         this.verifiedSessions = verifiedSessions;
         this.onVerifiedLogin = onVerifiedLogin;
+        this.grant = grant;
+        this.isRegistered = isRegistered;
+        this.register = register;
     }
 
     /**
@@ -60,6 +83,11 @@ public final class AuthMeLoginListener implements Listener {
                 uuid, session.mojangSession().canonicalName())));
     }
 
+    /**
+     * Identity (classification + link) is proven by the handshake, so it is committed here for
+     * every policy before AuthMe can authenticate. Only auto-login paths consume the session;
+     * REQUIRE_PASSWORD_ONCE keeps it for {@link #onAuthMeLogin(LoginEvent)}.
+     */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
         Optional<VerifiedSession> pending = verifiedSessions.find(event.getName(), event.getAddress());
@@ -68,42 +96,56 @@ public final class AuthMeLoginListener implements Listener {
         }
         VerifiedSession session = pending.get();
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-            verifiedSessions.remove(session.connectionId());
             return;
         }
         if (session.requiresPasswordOnce()) {
-            if (!authMeBridge.isRegistered(event.getName())) {
+            if (!isRegistered.test(event.getName())) {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                     "Your AuthMe account changed during login. Please reconnect.");
-                verifiedSessions.remove(session.connectionId());
+                return;
             }
-            return;
+        } else {
+            // One-shot consume on auto-login paths, before any commit or grant.
+            verifiedSessions.consume(event.getName(), event.getAddress());
         }
 
         try {
-            if (session.shouldRegister()) {
-                if (authMeBridge.isRegistered(event.getName())) {
-                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        "An account with this name already exists. Please reconnect or contact an administrator.");
-                    verifiedSessions.remove(session.connectionId());
-                    return;
-                }
-                String randomPassword = randomPassword();
-                if (!authMeBridge.registerPlayer(event.getName(), randomPassword)) {
-                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                        "Your account could not be prepared. Please try again or contact an administrator.");
-                    verifiedSessions.remove(session.connectionId());
-                    return;
-                }
+            // Single join, on the async pre-login thread: never on the main thread.
+            boolean committed;
+            try {
+                committed = storage.commitPremiumIdentity(session.name(),
+                    session.mojangSession().uuid().toString(),
+                    session.mojangSession().canonicalName(), session.linkSource()).join();
+            } catch (CompletionException | RejectedExecutionException ex) {
+                committed = false;
+            }
+            if (!committed) {
+                plugin.getLogger().severe("Premium identity for " + session.name()
+                    + " could not be persisted; refusing to grant access.");
+                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
+                return;
             }
             if (session.autoLogin()) {
-                authMeBridge.forceLoginFromProxy(event.getName());
+                if (session.shouldRegister()) {
+                    if (isRegistered.test(event.getName())) {
+                        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                            "An account with this name already exists. Please reconnect or contact an administrator.");
+                        return;
+                    }
+                    String randomPassword = randomPassword();
+                    if (!register.test(event.getName(), randomPassword)) {
+                        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                            "Your account could not be prepared. Please try again or contact an administrator.");
+                        return;
+                    }
+                }
+                grant.accept(event.getName());
+                onVerifiedLogin.accept(session.connectionId());
             }
         } catch (RuntimeException ex) {
             plugin.getLogger().severe("AuthMe rejected the verified login for " + event.getName() + ": " + ex.getMessage());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                 "Authentication could not be completed. Please try again later.");
-            verifiedSessions.remove(session.connectionId());
         }
     }
 
@@ -121,27 +163,17 @@ public final class AuthMeLoginListener implements Listener {
         if (player == null) {
             return;
         }
+        // Identity was already committed at pre-login; no storage call (and no join) here.
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
-        if (pending.isEmpty()) {
-            return;
+        pending.ifPresent(session -> onVerifiedLogin.accept(session.connectionId()));
+    }
+
+    private Component message(String key) {
+        String text = plugin.getConfig().getString("messages." + key);
+        if (text == null || text.isBlank()) {
+            text = "<red>Login verification failed.";
         }
-        VerifiedSession session = pending.get();
-        onVerifiedLogin.accept(session.connectionId());
-        boolean shouldLink = session.link().isEmpty()
-            && (session.shouldRegister() || session.requiresPasswordOnce() || session.autoLogin());
-        if (!shouldLink) {
-            return;
-        }
-        storage.putLink(session.name(), session.mojangSession().uuid().toString(),
-            session.mojangSession().canonicalName(), session.linkSource())
-            .whenComplete((ignored, error) -> {
-                if (error != null) {
-                    Throwable cause = error instanceof CompletionException && error.getCause() != null
-                        ? error.getCause() : error;
-                    plugin.getLogger().severe("Failed to store the verified account link for "
-                        + session.name() + ": " + cause.getMessage());
-                }
-            });
+        return miniMessage.deserialize(text);
     }
 
     private String randomPassword() {

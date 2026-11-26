@@ -4,6 +4,7 @@ import com.hizeric.logincore.storage.Storage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Field;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -43,6 +44,18 @@ class StorageTest {
             assertTrue(storage.unlink("NOTCH").get());
             assertTrue(storage.removeExempt("SOMENAME").get());
             assertEquals(0, storage.summary().get().links());
+        }
+    }
+
+    @Test
+    void startupEnablesDurabilityPragmas() throws Exception {
+        Path database = temporaryDirectory.resolve("pragmas.db");
+        try (Storage storage = new Storage(database);
+             Statement statement = storageConnection(storage).createStatement()) {
+            // busy_timeout and synchronous are per-connection, so read them on Storage's own connection.
+            assertEquals("wal", pragma(statement, "journal_mode"));
+            assertEquals("5000", pragma(statement, "busy_timeout"));
+            assertEquals("1", pragma(statement, "synchronous"));
         }
     }
 
@@ -203,6 +216,18 @@ class StorageTest {
             }
         }
         return false;
+    }
+
+    private static Connection storageConnection(Storage storage) throws Exception {
+        Field field = Storage.class.getDeclaredField("connection");
+        field.setAccessible(true);
+        return (Connection) field.get(storage);
+    }
+
+    private static String pragma(Statement statement, String name) throws SQLException {
+        try (ResultSet result = statement.executeQuery("PRAGMA " + name)) {
+            return result.next() ? result.getString(1) : null;
+        }
     }
 
     private static String classification(Connection connection, String normalizedName) throws SQLException {
