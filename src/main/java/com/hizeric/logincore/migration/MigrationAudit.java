@@ -1,6 +1,5 @@
 package com.hizeric.logincore.migration;
 
-import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.storage.Storage;
@@ -32,7 +31,6 @@ public final class MigrationAudit implements AutoCloseable {
 
     private final JavaPlugin plugin;
     private final Path dataFolder;
-    private final AuthMeBridge authMe;
     private final Storage storage;
     private final MojangClient mojang;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
@@ -42,10 +40,9 @@ public final class MigrationAudit implements AutoCloseable {
     });
     private final AtomicBoolean running = new AtomicBoolean();
 
-    public MigrationAudit(JavaPlugin plugin, AuthMeBridge authMe, Storage storage, MojangClient mojang) {
+    public MigrationAudit(JavaPlugin plugin, Storage storage, MojangClient mojang) {
         this.plugin = plugin;
         this.dataFolder = plugin.getDataFolder().toPath();
-        this.authMe = authMe;
         this.storage = storage;
         this.mojang = mojang;
     }
@@ -54,7 +51,6 @@ public final class MigrationAudit implements AutoCloseable {
     MigrationAudit(Path dataFolder, Storage storage) {
         this.plugin = null;
         this.dataFolder = dataFolder;
-        this.authMe = null;
         this.storage = storage;
         this.mojang = null;
     }
@@ -122,7 +118,7 @@ public final class MigrationAudit implements AutoCloseable {
             Files.writeString(directory.resolve("current-audit.txt"), audit.getFileName().toString(), StandardCharsets.UTF_8);
         }
         Set<String> completed = completedNames(audit);
-        List<String> names = authMe.registeredNames();
+        List<String> names = storage.registeredNames().join();
         int processed = 0;
         for (String name : names) {
             if (Thread.currentThread().isInterrupted()) {
@@ -132,7 +128,7 @@ public final class MigrationAudit implements AutoCloseable {
             if (completed.contains(normalizedName)) {
                 continue;
             }
-            AuthMeBridge.PlayerInfo info = authMe.playerInfo(name).orElse(null);
+            Storage.PlayerInfo info = storage.playerInfo(name).join().orElse(null);
             LookupResult lookup = mojang.lookupName(name);
             String status = lookup.isPremium() ? "PREMIUM_NAME"
                 : lookup.isNotPremium() ? "NOT_PREMIUM" : "LOOKUP_ERROR";

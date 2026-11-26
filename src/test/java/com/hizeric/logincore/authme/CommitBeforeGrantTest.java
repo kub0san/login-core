@@ -1,15 +1,14 @@
 package com.hizeric.logincore.authme;
 
+import com.hizeric.logincore.TestPlugin;
+import com.hizeric.logincore.events.LoginEvent;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
-import fr.xephi.authme.events.LoginEvent;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
@@ -29,9 +28,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
-import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommitBeforeGrantTest {
@@ -222,7 +221,11 @@ class CommitBeforeGrantTest {
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
             assertTrue(storage.link("Notch").get().isEmpty());
 
-            listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+            Player player = player(kicks);
+            assertTrue(listener.onPasswordLogin(player), "a verified commit must grant");
+            assertTrue(TestPlugin.firedEvents().stream()
+                .anyMatch(fired -> fired instanceof LoginEvent login && login.getPlayer() == player),
+                "a successful password login must fire the compatibility event");
 
             assertEquals("PREMIUM", storage.classification("Notch").get().orElseThrow());
             Storage.Link link = storage.link("Notch").get().orElseThrow();
@@ -250,9 +253,11 @@ class CommitBeforeGrantTest {
         assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult(),
             "the failure belongs to LoginEvent, not pre-login");
 
-        listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+        assertFalse(listener.onPasswordLogin(player(kicks)), "a failed commit must not grant");
 
         assertTrue(released.isEmpty(), "releaseAfterAuth must not run after a failed commit");
+        assertTrue(TestPlugin.firedEvents().stream().noneMatch(fired -> fired instanceof LoginEvent),
+            "a failed password login must not fire the compatibility event");
         assertTrue(kicks.get(0).contains("account-conflict"), kicks.toString());
         assertTrue(sessions.find("Notch", event.getAddress()).isEmpty());
     }
@@ -272,7 +277,7 @@ class CommitBeforeGrantTest {
             listener.onAsyncPreLogin(event);
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
 
-            listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+            assertFalse(listener.onPasswordLogin(player(kicks)), "a failed commit must not grant");
 
             assertTrue(released.isEmpty(), "ALREADY_DIFFERENT must not release");
             assertTrue(kicks.get(0).contains("account-conflict"), kicks.toString());
@@ -400,7 +405,7 @@ class CommitBeforeGrantTest {
             AuthMeLoginListener listener = listener(authState, storage, sessions, ignored -> { }, ignored -> { });
 
             listener.onAsyncPreLogin(event());
-            listener.onAuthMeLogin(new LoginEvent(player()));
+            assertTrue(listener.onPasswordLogin(player()));
 
             assertTrue(authState.isAuthenticated("notch"));
         }
@@ -509,16 +514,11 @@ class CommitBeforeGrantTest {
         );
     }
 
-    /** Minimal Plugin stub; no server, no MockBukkit, no AuthMe singleton. */
+    /** Disabled plugin stub with a recording server; no MockBukkit, no vendor singleton. */
     private static Plugin plugin() {
-        FileConfiguration config = new YamlConfiguration();
-        config.set("messages.account-conflict", "<red>account-conflict</red>");
-        config.set("messages.rename-conflict", "<red>rename-conflict</red>");
-        return (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
-            (proxy, method, args) -> switch (method.getName()) {
-                case "getConfig" -> config;
-                case "getLogger" -> Logger.getLogger("commit-before-grant-test");
-                default -> null;
-            });
+        TestPlugin plugin = TestPlugin.create();
+        plugin.getConfig().set("messages.account-conflict", "<red>account-conflict</red>");
+        plugin.getConfig().set("messages.rename-conflict", "<red>rename-conflict</red>");
+        return plugin;
     }
 }

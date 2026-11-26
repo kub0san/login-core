@@ -13,7 +13,6 @@ import com.github.retrooper.packetevents.wrapper.login.server.WrapperLoginServer
 import com.github.retrooper.packetevents.wrapper.login.server.WrapperLoginServerEncryptionRequest;
 import io.netty.channel.Channel;
 import net.kyori.adventure.text.minimessage.MiniMessage;
-import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.decision.LoginDecisionEngine;
 import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.mojang.MojangClient;
@@ -48,7 +47,6 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
 
     private static final Pattern VALID_NAME = Pattern.compile("^[A-Za-z0-9_]{3,16}$");
     private final JavaPlugin plugin;
-    private final AuthMeBridge authMe;
     private final Storage storage;
     private final VerifiedSessions verifiedSessions;
     private final MojangClient mojang;
@@ -60,11 +58,10 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
     private final PendingHandshakeThrottle pendingByIp = new PendingHandshakeThrottle();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public PremiumLoginListener(JavaPlugin plugin, AuthMeBridge authMe, Storage storage,
+    public PremiumLoginListener(JavaPlugin plugin, Storage storage,
                                 VerifiedSessions verifiedSessions, MojangClient mojang,
                                 ExecutorService workers, EncryptionKeys encryptionKeys, LoginMetrics metrics) {
         this.plugin = plugin;
-        this.authMe = authMe;
         this.storage = storage;
         this.verifiedSessions = verifiedSessions;
         this.mojang = mojang;
@@ -117,8 +114,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         attempt.timeout = channel.eventLoop().schedule(
             () -> disconnect(attempt, "lookup-unavailable"), timeoutSeconds, TimeUnit.SECONDS);
         try {
-            CompletableFuture<Boolean> registered = CompletableFuture.supplyAsync(
-                () -> authMe.isRegistered(name), workers);
+            CompletableFuture<Boolean> registered = storage.isRegistered(name);
             CompletableFuture<Optional<String>> storedClassification = storage.classification(name);
             storage.account(name)
                 .thenCombineAsync(registered, (account, isRegistered) -> new AccountContext(account, isRegistered), workers)

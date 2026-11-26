@@ -20,12 +20,10 @@ base {
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.3.build.200-stable")
     compileOnly("com.github.retrooper:packetevents-spigot:2.14.0")
-    compileOnly("fr.xephi:authme-core:6.0.1")
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
     testImplementation("io.papermc.paper:paper-api:26.3.build.200-stable")
-    testImplementation("fr.xephi:authme-core:6.0.1")
     testImplementation("com.github.retrooper:packetevents-spigot:2.14.0")
     testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.3:4.126.0")
     testImplementation("io.netty:netty-transport:4.1.72.Final")

@@ -25,7 +25,7 @@ class MigrationAuditTest {
         Path source = Path.of("src/main/java/com/hizeric/logincore/migration/MigrationAudit.java");
         String text = Files.readString(source, StandardCharsets.UTF_8);
         assertFalse(text.contains("fr.xephi"),
-            "MigrationAudit must not reference vendor API types; use AuthMeBridge.PlayerInfo");
+            "MigrationAudit must not reference vendor API types; use Storage.PlayerInfo");
     }
 
     @Test

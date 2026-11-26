@@ -2,7 +2,6 @@ package com.hizeric.logincore;
 
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerCommon;
-import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.authme.AuthMeLoginListener;
 import com.hizeric.logincore.command.AdminCommand;
 import com.hizeric.logincore.command.ChangepasswordCommand;
@@ -19,7 +18,6 @@ import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.PreAuthRestrictionListener;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.storage.Storage;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.IOException;
@@ -44,17 +42,6 @@ public final class LoginCore extends JavaPlugin {
         saveDefaultConfig();
         reloadConfig();
 
-        Plugin authMePlugin = getServer().getPluginManager().getPlugin("AuthMe");
-        if (authMePlugin == null || !authMePlugin.isEnabled()) {
-            getLogger().severe("AuthMeReloaded is required; disabling login-core.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
-        if (authMePlugin.getConfig().getBoolean("settings.enablePremium", false)) {
-            getLogger().severe("AuthMe premium login is enabled. Set settings.enablePremium: false in AuthMe's config before enabling login-core.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
-        }
         if (getServer().getOnlineMode()) {
             getLogger().severe("login-core requires an offline-mode server. Set online-mode=false in server.properties.");
             getServer().getPluginManager().disablePlugin(this);
@@ -79,7 +66,7 @@ public final class LoginCore extends JavaPlugin {
         }
 
         try {
-            storage = new Storage(getDataFolder().toPath().resolve("data.db"));
+            storage = new Storage(getDataFolder().toPath().resolve("authme.db"));
             workers = new ThreadPoolExecutor(2, 4, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(256), runnable -> {
                     Thread thread = new Thread(runnable, "login-core-Worker");
@@ -87,7 +74,6 @@ public final class LoginCore extends JavaPlugin {
                     return thread;
                 }, new ThreadPoolExecutor.AbortPolicy());
 
-            AuthMeBridge authMe = new AuthMeBridge();
             AuthState authState = new AuthState();
             VerifiedSessions verifiedSessions = new VerifiedSessions();
             MojangClient mojang = new MojangClient(
@@ -106,20 +92,22 @@ public final class LoginCore extends JavaPlugin {
             EncryptionKeys encryptionKeys = new EncryptionKeys();
             LoginMetrics loginMetrics = new LoginMetrics();
             loginListener = new PremiumLoginListener(
-                this, authMe, storage, verifiedSessions, mojang, workers, encryptionKeys, loginMetrics);
+                this, storage, verifiedSessions, mojang, workers, encryptionKeys, loginMetrics);
             packetListener = PacketEvents.getAPI().getEventManager().registerListener(loginListener);
             getServer().getPluginManager().registerEvents(loginListener, this);
-            getServer().getPluginManager().registerEvents(
-                new AuthMeLoginListener(this, authState, authMe, storage, verifiedSessions,
-                    loginListener::releaseAfterAuth), this);
+            AuthMeLoginListener authListener =
+                new AuthMeLoginListener(this, authState, storage, verifiedSessions,
+                    loginListener::releaseAfterAuth);
+            getServer().getPluginManager().registerEvents(authListener, this);
 
-            migrationAudit = new MigrationAudit(this, authMe, storage, mojang);
+            migrationAudit = new MigrationAudit(this, storage, mojang);
             AdminCommand adminCommand =
-                new AdminCommand(this, authMe, storage, mojang, migrationAudit, workers, loginMetrics);
+                new AdminCommand(this, storage, mojang, migrationAudit, workers, loginMetrics);
             getCommand("logincore").setExecutor(adminCommand);
             getCommand("logincore").setTabCompleter(adminCommand);
 
-            LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState);
+            LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState,
+                authListener::onPasswordLogin);
             RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState);
             ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage);
             getCommand("login").setExecutor(loginCommand);

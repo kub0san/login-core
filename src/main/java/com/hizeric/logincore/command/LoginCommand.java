@@ -18,6 +18,7 @@ import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
+import java.util.function.Predicate;
 
 public final class LoginCommand implements CommandExecutor, TabCompleter {
 
@@ -28,14 +29,17 @@ public final class LoginCommand implements CommandExecutor, TabCompleter {
     private final Executor workers;
     private final Storage storage;
     private final AuthState authState;
+    private final Predicate<Player> onPasswordLogin;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
     private final ConcurrentMap<String, Failures> failures = new ConcurrentHashMap<>();
 
-    public LoginCommand(JavaPlugin plugin, Executor workers, Storage storage, AuthState authState) {
+    public LoginCommand(JavaPlugin plugin, Executor workers, Storage storage, AuthState authState,
+                        Predicate<Player> onPasswordLogin) {
         this.plugin = plugin;
         this.workers = workers;
         this.storage = storage;
         this.authState = authState;
+        this.onPasswordLogin = onPasswordLogin;
     }
 
     @Override
@@ -66,6 +70,9 @@ public final class LoginCommand implements CommandExecutor, TabCompleter {
             if (storage.verifyPassword(name, password).get()) {
                 storage.setLoggedIn(name).get();
                 onMain(() -> {
+                    if (!onPasswordLogin.test(player)) {
+                        return;
+                    }
                     failures.remove(name);
                     authState.authenticate(name);
                     message(sender, "<green>You are now logged in.");

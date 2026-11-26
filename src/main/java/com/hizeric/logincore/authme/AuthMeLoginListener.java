@@ -1,7 +1,6 @@
 package com.hizeric.logincore.authme;
 
-import fr.xephi.authme.events.LoginEvent;
-import fr.xephi.authme.events.RestoreSessionEvent;
+import com.hizeric.logincore.events.LoginEvent;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
@@ -41,15 +40,17 @@ public final class AuthMeLoginListener implements Listener {
     private final Predicate<String> isRegistered;
     private final BiPredicate<String, String> register;
     // Registration intent survives from the async pre-login commit to the synchronous login
-    // check so a player rejected by Bukkit's ban check never gets an AuthMe account.
+    // check so a player rejected by Bukkit's ban check never gets an account.
     private final Map<String, String> pendingRegistrations = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public AuthMeLoginListener(Plugin plugin, AuthState authState, AuthMeBridge authMeBridge, Storage storage,
+    public AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage,
                                VerifiedSessions verifiedSessions, Consumer<String> onVerifiedLogin) {
         this(plugin, authState, storage, verifiedSessions, onVerifiedLogin,
-            authMeBridge::forceLoginFromProxy, authMeBridge::isRegistered, authMeBridge::registerPlayer);
+            name -> storage.setLoggedIn(name).join(),
+            name -> storage.isRegistered(name).join(),
+            (name, password) -> storage.registerPlayer(name, password).join());
     }
 
     AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
@@ -96,8 +97,8 @@ public final class AuthMeLoginListener implements Listener {
 
     /**
      * Auto-login paths prove identity with the handshake, so classification + link are committed
-     * here before the grant. REQUIRE_PASSWORD_ONCE does not commit: AuthMe must verify the account
-     * password first, and {@link #onAuthMeLogin(LoginEvent)} commits only after that succeeds.
+     * here before the grant. REQUIRE_PASSWORD_ONCE does not commit: the account password must be
+     * verified first, and {@link #onPasswordLogin(Player)} commits only after that succeeds.
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
@@ -111,10 +112,10 @@ public final class AuthMeLoginListener implements Listener {
         }
         if (session.requiresPasswordOnce()) {
             // The existing account must still exist, but no identity write is allowed before the
-            // password; the session survives to LoginEvent for the commit.
+            // password; the session survives to the password login for the commit.
             if (!isRegistered.test(event.getName())) {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                    "Your AuthMe account changed during login. Please reconnect.");
+                    "Your account changed during login. Please reconnect.");
             }
             return;
         }
@@ -150,7 +151,8 @@ public final class AuthMeLoginListener implements Listener {
             grant.accept(event.getName());
             onVerifiedLogin.accept(session.connectionId());
         } catch (RuntimeException ex) {
-            plugin.getLogger().severe("AuthMe rejected the verified login for " + event.getName() + ": " + ex.getMessage());
+            plugin.getLogger().severe("Login verification rejected the verified login for "
+                + event.getName() + ": " + ex.getMessage());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                 "Authentication could not be completed. Please try again later.");
         }
@@ -178,9 +180,9 @@ public final class AuthMeLoginListener implements Listener {
     }
 
     /**
-     * Bukkit performs its ban check before this handler, and AuthMe only processes the join at
-     * {@link org.bukkit.event.player.PlayerJoinEvent}. Registering here keeps banned players out of
-     * the account table without delaying or reordering the identity commit at pre-login.
+     * Bukkit performs its ban check before this handler. Registering here keeps rejected players
+     * out of the account table without delaying or reordering the identity commit at pre-login.
+     * A rejected pre-login must also never leave stale in-memory authentication behind.
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLogin(PlayerLoginEvent event) {
@@ -188,38 +190,36 @@ public final class AuthMeLoginListener implements Listener {
         if (player == null) {
             return;
         }
-        String password = pendingRegistrations.remove(registrationKey(player.getName(), event.getAddress()));
-        if (password == null || event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
+        String name = player.getName();
+        if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
+            authState.logout(name);
             return;
         }
-        if (!register.test(player.getName(), password)) {
-            plugin.getLogger().severe("Could not prepare the AuthMe account for " + player.getName());
+        String password = pendingRegistrations.remove(registrationKey(name, event.getAddress()));
+        if (password == null) {
+            return;
+        }
+        if (!register.test(name, password)) {
+            plugin.getLogger().severe("Could not prepare the account for " + name);
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("account-conflict"));
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onSessionRestore(RestoreSessionEvent event) {
-        Player player = event.getPlayer();
-        if (player != null && verifiedSessions.find(player.getName(), player.getAddress()).isPresent()) {
-            event.setCancelled(true);
-        }
-    }
-
     /**
-     * AuthMe fires this after a successful password login. REQUIRE_PASSWORD_ONCE sessions survive
-     * pre-login; commit their identity first, and only then release. A failed commit kicks instead.
-     * Auto-login sessions were consumed at pre-login, so this is one-shot.
+     * Called by the password command after the account password has been verified. REQUIRE_PASSWORD_ONCE
+     * sessions survive pre-login; commit their identity first, and only then release. A failed commit
+     * kicks instead. Auto-login sessions were consumed at pre-login, so this is one-shot.
+     *
+     * @return false when the player was kicked, true after the verified grant
      */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onAuthMeLogin(LoginEvent event) {
-        Player player = event.getPlayer();
+    public boolean onPasswordLogin(Player player) {
         if (player == null) {
-            return;
+            return false;
         }
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
         if (pending.isEmpty()) {
-            return;
+            plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
+            return true;
         }
         VerifiedSession session = pending.get();
         CommitResult result;
@@ -232,10 +232,12 @@ public final class AuthMeLoginListener implements Listener {
             plugin.getLogger().severe("Premium identity for " + session.name()
                 + " could not be persisted after password login; refusing to release.");
             player.kick(message("account-conflict"));
-            return;
+            return false;
         }
         authState.authenticate(player.getName());
         onVerifiedLogin.accept(session.connectionId());
+        plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
+        return true;
     }
 
     private enum CommitResult { COMMITTED, CONFLICT, RENAME_CONFLICT }
