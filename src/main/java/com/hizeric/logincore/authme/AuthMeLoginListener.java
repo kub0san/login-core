@@ -2,6 +2,7 @@ package com.hizeric.logincore.authme;
 
 import fr.xephi.authme.events.LoginEvent;
 import fr.xephi.authme.events.RestoreSessionEvent;
+import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
@@ -32,6 +33,7 @@ import java.util.function.Predicate;
 public final class AuthMeLoginListener implements Listener {
 
     private final Plugin plugin;
+    private final AuthState authState;
     private final Storage storage;
     private final VerifiedSessions verifiedSessions;
     private final Consumer<String> onVerifiedLogin;
@@ -44,22 +46,23 @@ public final class AuthMeLoginListener implements Listener {
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public AuthMeLoginListener(Plugin plugin, AuthMeBridge authMeBridge, Storage storage,
+    public AuthMeLoginListener(Plugin plugin, AuthState authState, AuthMeBridge authMeBridge, Storage storage,
                                VerifiedSessions verifiedSessions, Consumer<String> onVerifiedLogin) {
-        this(plugin, storage, verifiedSessions, onVerifiedLogin,
+        this(plugin, authState, storage, verifiedSessions, onVerifiedLogin,
             authMeBridge::forceLoginFromProxy, authMeBridge::isRegistered, authMeBridge::registerPlayer);
     }
 
-    AuthMeLoginListener(Plugin plugin, Storage storage, VerifiedSessions verifiedSessions,
+    AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
                         Consumer<String> onVerifiedLogin, Consumer<String> grant) {
-        this(plugin, storage, verifiedSessions, onVerifiedLogin, grant, name -> true,
+        this(plugin, authState, storage, verifiedSessions, onVerifiedLogin, grant, name -> true,
             (name, password) -> true);
     }
 
-    AuthMeLoginListener(Plugin plugin, Storage storage, VerifiedSessions verifiedSessions,
+    AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
                         Consumer<String> onVerifiedLogin, Consumer<String> grant,
                         Predicate<String> isRegistered, BiPredicate<String, String> register) {
         this.plugin = plugin;
+        this.authState = authState;
         this.storage = storage;
         this.verifiedSessions = verifiedSessions;
         this.onVerifiedLogin = onVerifiedLogin;
@@ -143,6 +146,7 @@ public final class AuthMeLoginListener implements Listener {
                 }
                 pendingRegistrations.put(registrationKey(event.getName(), event.getAddress()), randomPassword());
             }
+            authState.authenticate(event.getName());
             grant.accept(event.getName());
             onVerifiedLogin.accept(session.connectionId());
         } catch (RuntimeException ex) {
@@ -230,6 +234,7 @@ public final class AuthMeLoginListener implements Listener {
             player.kick(message("account-conflict"));
             return;
         }
+        authState.authenticate(player.getName());
         onVerifiedLogin.accept(session.connectionId());
     }
 

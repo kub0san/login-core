@@ -1,6 +1,7 @@
 package com.hizeric.logincore.authme;
 
 import com.hizeric.logincore.mojang.MojangClient;
+import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
@@ -376,6 +377,35 @@ class CommitBeforeGrantTest {
         }
     }
 
+    @Test
+    void autoLoginGrantMarksPlayerAuthenticated() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("auto-auth-state.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session());
+            AuthState authState = new AuthState();
+
+            listener(authState, storage, sessions, ignored -> { }, ignored -> { })
+                .onAsyncPreLogin(event());
+
+            assertTrue(authState.isAuthenticated("notch"));
+        }
+    }
+
+    @Test
+    void passwordOnceReleaseMarksPlayerAuthenticated() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("password-once-auth-state.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(passwordOnceSession());
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = listener(authState, storage, sessions, ignored -> { }, ignored -> { });
+
+            listener.onAsyncPreLogin(event());
+            listener.onAuthMeLogin(new LoginEvent(player()));
+
+            assertTrue(authState.isAuthenticated("notch"));
+        }
+    }
+
     private static PlayerLoginEvent loginEvent() throws Exception {
         return new PlayerLoginEvent(player(), "127.0.0.1", InetAddress.getByName("127.0.0.1"));
     }
@@ -394,7 +424,20 @@ class CommitBeforeGrantTest {
                                                 Consumer<String> released, Consumer<String> grant,
                                                 Predicate<String> isRegistered,
                                                 BiPredicate<String, String> register) {
-        return new AuthMeLoginListener(plugin(), storage, sessions, released, grant, isRegistered, register);
+        return listener(new AuthState(), storage, sessions, released, grant, isRegistered, register);
+    }
+
+    private static AuthMeLoginListener listener(AuthState authState, Storage storage, VerifiedSessions sessions,
+                                                Consumer<String> released, Consumer<String> grant) {
+        return listener(authState, storage, sessions, released, grant, name -> true,
+            (name, password) -> true);
+    }
+
+    private static AuthMeLoginListener listener(AuthState authState, Storage storage, VerifiedSessions sessions,
+                                                Consumer<String> released, Consumer<String> grant,
+                                                Predicate<String> isRegistered,
+                                                BiPredicate<String, String> register) {
+        return new AuthMeLoginListener(plugin(), authState, storage, sessions, released, grant, isRegistered, register);
     }
 
     private static AsyncPlayerPreLoginEvent event() throws Exception {

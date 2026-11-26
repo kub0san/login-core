@@ -16,6 +16,7 @@ import com.hizeric.logincore.mojang.LookupCache;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.mojang.RateBudget;
 import com.hizeric.logincore.session.AuthState;
+import com.hizeric.logincore.session.PreAuthRestrictionListener;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.storage.Storage;
 import org.bukkit.plugin.Plugin;
@@ -87,6 +88,7 @@ public final class LoginCore extends JavaPlugin {
                 }, new ThreadPoolExecutor.AbortPolicy());
 
             AuthMeBridge authMe = new AuthMeBridge();
+            AuthState authState = new AuthState();
             VerifiedSessions verifiedSessions = new VerifiedSessions();
             MojangClient mojang = new MojangClient(
                 HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
@@ -108,7 +110,8 @@ public final class LoginCore extends JavaPlugin {
             packetListener = PacketEvents.getAPI().getEventManager().registerListener(loginListener);
             getServer().getPluginManager().registerEvents(loginListener, this);
             getServer().getPluginManager().registerEvents(
-                new AuthMeLoginListener(this, authMe, storage, verifiedSessions, loginListener::releaseAfterAuth), this);
+                new AuthMeLoginListener(this, authState, authMe, storage, verifiedSessions,
+                    loginListener::releaseAfterAuth), this);
 
             migrationAudit = new MigrationAudit(this, authMe, storage, mojang);
             AdminCommand adminCommand =
@@ -116,7 +119,6 @@ public final class LoginCore extends JavaPlugin {
             getCommand("logincore").setExecutor(adminCommand);
             getCommand("logincore").setTabCompleter(adminCommand);
 
-            AuthState authState = new AuthState();
             LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState);
             RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState);
             ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage);
@@ -126,6 +128,8 @@ public final class LoginCore extends JavaPlugin {
             getCommand("register").setTabCompleter(registerCommand);
             getCommand("changepassword").setExecutor(changepasswordCommand);
             getCommand("changepassword").setTabCompleter(changepasswordCommand);
+            getServer().getPluginManager().registerEvents(
+                new PreAuthRestrictionListener(this, authState, storage, workers), this);
             getLogger().info("login-core login verification is active in " + getConfig().getString("mode") + " mode.");
         } catch (SQLException | IOException | java.security.GeneralSecurityException ex) {
             getLogger().severe("login-core could not initialize required storage or encryption: " + ex.getMessage());
