@@ -234,6 +234,18 @@ class StorageTest {
     }
 
     @Test
+    void putLinkNeverOverwritesAnExistingUuid() throws Exception {
+        String otherUuid = "00000000-0000-0000-0000-000000000001";
+        try (Storage storage = new Storage(temporaryDirectory.resolve("uuid-write-once.db"))) {
+            assertTrue(storage.putLink("NoTcH", UUID, "Notch", "AUTO").get());
+            assertFalse(storage.putLink("notch", otherUuid, "Notch", "AUTO").get(),
+                "a different UUID for an existing name must be reported as a conflict");
+            assertEquals(UUID, storage.link("Notch").get().orElseThrow().mojangUuid(),
+                "the stored UUID must not change");
+        }
+    }
+
+    @Test
     void legacyPremiumLinkIsClassifiedPremium() throws Exception {
         Path database = temporaryDirectory.resolve("migration-premium.db");
         try (Storage storage = new Storage(database)) {

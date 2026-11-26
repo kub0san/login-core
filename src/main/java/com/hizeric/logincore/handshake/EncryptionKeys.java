@@ -15,7 +15,7 @@ public final class EncryptionKeys {
 
     public EncryptionKeys() throws GeneralSecurityException {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance("RSA");
-        keyPairGenerator.initialize(1024);
+        keyPairGenerator.initialize(2048);
         this.keyPair = keyPairGenerator.generateKeyPair();
     }
 

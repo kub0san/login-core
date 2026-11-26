@@ -249,20 +249,22 @@ public final class Storage implements AutoCloseable {
         return backup;
     }
 
-    // Internal-only (login pipeline); never wire this to a command — classification is immutable.
-    public CompletableFuture<Void> putLink(String name, String mojangUuid, String canonicalName, String source) {
+    /**
+     * Internal-only (login pipeline); never wire this to a command. Returns true when the
+     * requested UUID is stored for the name; false when a different UUID is already linked
+     * (write-once, reported as a conflict so callers can fail closed).
+     */
+    public CompletableFuture<Boolean> putLink(String name, String mojangUuid, String canonicalName, String source) {
         String normalized = normalize(name);
-        return submit(() -> {
-            writeLink(normalized, mojangUuid, canonicalName, source);
-            return null;
-        });
+        return submit(() -> writeLink(normalized, mojangUuid, canonicalName, source));
     }
 
     /**
      * Commits the write-once PREMIUM classification and the link in one transaction: a link
-     * failure (e.g. a duplicate premium UUID) rolls the classification back, so a failed
-     * persistence can never leave a lockout behind. False means a conflicting stored
-     * classification; SQL failures complete the future exceptionally.
+     * failure (a duplicate premium UUID or a different UUID already linked to this name) rolls
+     * the classification back, so a failed persistence can never leave a lockout behind. False
+     * means a conflicting stored classification or a UUID conflict; SQL failures complete the
+     * future exceptionally.
      */
     public CompletableFuture<Boolean> commitPremiumIdentity(String name, String mojangUuid,
                                                             String canonicalName, String source) {
@@ -276,7 +278,10 @@ public final class Storage implements AutoCloseable {
                     connection.rollback();
                     return false;
                 }
-                writeLink(normalizedName, mojangUuid, canonicalName, source);
+                if (!writeLink(normalizedName, mojangUuid, canonicalName, source)) {
+                    connection.rollback();
+                    return false;
+                }
                 connection.commit();
                 return true;
             } catch (SQLException ex) {
@@ -376,7 +381,8 @@ public final class Storage implements AutoCloseable {
         }
     }
 
-    private void writeLink(String normalizedName, String mojangUuid, String canonicalName, String source)
+    /** Returns false when a different UUID is already stored for the name (write-once link). */
+    private boolean writeLink(String normalizedName, String mojangUuid, String canonicalName, String source)
         throws SQLException {
         long now = Instant.now().toEpochMilli();
         try (PreparedStatement statement = connection.prepareStatement("""
@@ -387,6 +393,7 @@ public final class Storage implements AutoCloseable {
                 canonical_name = excluded.canonical_name,
                 last_verified_at = excluded.last_verified_at,
                 source = excluded.source
+            WHERE links.mojang_uuid = excluded.mojang_uuid
             """)) {
             statement.setString(1, normalizedName);
             statement.setString(2, mojangUuid);
@@ -394,7 +401,8 @@ public final class Storage implements AutoCloseable {
             statement.setLong(4, now);
             statement.setLong(5, now);
             statement.setString(6, source);
-            statement.executeUpdate();
+            // A conflicting UUID makes the DO UPDATE predicate false, so zero rows change.
+            return statement.executeUpdate() > 0;
         }
     }
 

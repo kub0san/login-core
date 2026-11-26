@@ -21,6 +21,14 @@ class MigrationAuditTest {
     Path temporaryDirectory;
 
     @Test
+    void migrationAuditHasNoVendorApiImport() throws Exception {
+        Path source = Path.of("src/main/java/com/hizeric/logincore/migration/MigrationAudit.java");
+        String text = Files.readString(source, StandardCharsets.UTF_8);
+        assertFalse(text.contains("fr.xephi"),
+            "MigrationAudit must not reference vendor API types; use AuthMeBridge.PlayerInfo");
+    }
+
+    @Test
     void migrateApplySkipsPremiumNames() throws Exception {
         Path dataFolder = temporaryDirectory.resolve("data");
         Path migration = dataFolder.resolve("migration");

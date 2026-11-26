@@ -79,7 +79,12 @@ public final class AuthMeBridge {
         return authMeApi.getLastLoginTime(playerName);
     }
 
-    public Optional<AuthMePlayer> playerInfo(String playerName) {
-        return authMeApi.getPlayerInfo(playerName);
+    /** Local projection of AuthMe data so callers never depend on the vendor API type. */
+    public record PlayerInfo(Optional<Instant> lastLogin, Optional<String> lastIp, Instant registeredAt) {
+    }
+
+    public Optional<PlayerInfo> playerInfo(String playerName) {
+        return authMeApi.getPlayerInfo(playerName).map(info -> new PlayerInfo(
+            info.getLastLoginDate(), info.getLastLoginIpAddress(), info.getRegistrationDate()));
     }
 }

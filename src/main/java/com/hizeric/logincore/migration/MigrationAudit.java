@@ -1,6 +1,5 @@
 package com.hizeric.logincore.migration;
 
-import fr.xephi.authme.api.v3.AuthMePlayer;
 import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.mojang.MojangClient;
@@ -133,14 +132,14 @@ public final class MigrationAudit implements AutoCloseable {
             if (completed.contains(normalizedName)) {
                 continue;
             }
-            AuthMePlayer info = authMe.playerInfo(name).orElse(null);
+            AuthMeBridge.PlayerInfo info = authMe.playerInfo(name).orElse(null);
             LookupResult lookup = mojang.lookupName(name);
             String status = lookup.isPremium() ? "PREMIUM_NAME"
                 : lookup.isNotPremium() ? "NOT_PREMIUM" : "LOOKUP_ERROR";
             String uuid = lookup.isPremium() ? lookup.mojangUuid().toString() : "";
-            String lastLogin = info == null ? "" : info.getLastLoginDate().map(Instant::toString).orElse("");
-            String lastIp = info == null ? "" : info.getLastLoginIpAddress().orElse("");
-            String registeredAt = info == null ? "" : info.getRegistrationDate().toString();
+            String lastLogin = info == null ? "" : info.lastLogin().map(Instant::toString).orElse("");
+            String lastIp = info == null ? "" : info.lastIp().orElse("");
+            String registeredAt = info == null ? "" : info.registeredAt().toString();
             String row = csv(name) + "," + status + "," + csv(uuid) + "," + csv(lastLogin) + ","
                 + csv(lastIp) + "," + csv(registeredAt) + System.lineSeparator();
             Files.writeString(audit, row, StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.APPEND);

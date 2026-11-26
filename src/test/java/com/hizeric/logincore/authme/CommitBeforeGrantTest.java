@@ -119,6 +119,28 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void uuidConflictRejectsAndDoesNotGrant() throws Exception {
+        String otherUuid = "00000000-0000-0000-0000-000000000001";
+        try (Storage storage = new Storage(temporaryDirectory.resolve("uuid-conflict.db"))) {
+            storage.putLink("Notch", otherUuid, "Notch", "AUTO").get();
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session());
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, grants);
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertTrue(grants.isEmpty());
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
+            assertEquals(otherUuid, storage.link("Notch").get().orElseThrow().mojangUuid(),
+                "the conflicting UUID must not be overwritten");
+            assertTrue(storage.classification("Notch").get().isEmpty(),
+                "a UUID conflict must not leave a PREMIUM classification behind");
+        }
+    }
+
+    @Test
     void passwordOnceCommitsAtPreLoginAndSurvivesUntilLoginEvent() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("password-once.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
