@@ -17,9 +17,12 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -303,6 +306,64 @@ class StorageTest {
                 "a different UUID for an existing name must be reported as a conflict");
             assertEquals(UUID, storage.link("Notch").get().orElseThrow().mojangUuid(),
                 "the stored UUID must not change");
+        }
+    }
+
+    @Test
+    void concurrentPremiumCommitsKeepOneWriteOnceLink() throws Exception {
+        String uuidA = "00000000-0000-0000-0000-0000000000a1";
+        String uuidB = "00000000-0000-0000-0000-0000000000b2";
+        try (Storage storage = new Storage(temporaryDirectory.resolve("concurrent-commits.db"))) {
+            CompletableFuture<Boolean> first =
+                storage.commitPremiumIdentity("Notch", uuidA, "Notch", "AUTO");
+            CompletableFuture<Boolean> second =
+                storage.commitPremiumIdentity("Notch", uuidB, "Notch", "AUTO");
+
+            boolean firstCommitted = first.join();
+            boolean secondCommitted = second.join();
+
+            assertTrue(firstCommitted ^ secondCommitted,
+                "exactly one concurrent commit for the same name may win");
+            String winner = firstCommitted ? uuidA : uuidB;
+            String loser = firstCommitted ? uuidB : uuidA;
+            assertEquals("PREMIUM", storage.classification("NOTCH").get().orElseThrow());
+            assertEquals(winner, storage.link("Notch").get().orElseThrow().mojangUuid());
+            assertNotEquals(loser, storage.link("Notch").get().orElseThrow().mojangUuid());
+            assertEquals(1, storage.summary().get().links());
+            assertEquals(1, storage.summary().get().classifications());
+        }
+    }
+
+    @Test
+    void onePremiumUuidCannotBeAdoptedByTwoNames() throws Exception {
+        String uuid = "00000000-0000-0000-0000-0000000000c3";
+        try (Storage storage = new Storage(temporaryDirectory.resolve("one-uuid-two-names.db"))) {
+            CompletableFuture<Boolean> alpha =
+                storage.commitPremiumIdentity("Alpha", uuid, "Alpha", "AUTO");
+            CompletableFuture<Boolean> beta =
+                storage.commitPremiumIdentity("Beta", uuid, "Beta", "AUTO");
+
+            boolean alphaCommitted = committed(alpha);
+            boolean betaCommitted = committed(beta);
+
+            assertTrue(alphaCommitted ^ betaCommitted,
+                "a single premium UUID may be linked to exactly one name");
+            String winner = alphaCommitted ? "Alpha" : "Beta";
+            String loser = alphaCommitted ? "Beta" : "Alpha";
+            assertEquals(uuid, storage.link(winner).get().orElseThrow().mojangUuid());
+            assertTrue(storage.link(loser).get().isEmpty(), "the losing name must not adopt the UUID");
+            assertTrue(storage.classification(loser).get().isEmpty(),
+                "the rolled-back commit must not leave a classification lockout");
+            assertEquals(1, storage.summary().get().links());
+            assertEquals(1, storage.summary().get().classifications());
+        }
+    }
+
+    private static boolean committed(CompletableFuture<Boolean> future) {
+        try {
+            return future.join();
+        } catch (CompletionException conflict) {
+            return false; // the unique UUID index rejects the second name; its transaction rolls back
         }
     }
 

@@ -64,6 +64,25 @@ class VerifiedSessionTest {
     }
 
     @Test
+    void expiredSessionCannotBeConsumed() throws Exception {
+        VerifiedSessions sessions = new VerifiedSessions();
+        VerifiedSession first = session("connection-a", verified());
+
+        assertTrue(sessions.put(first));
+        expire(sessions, "connection-a");
+
+        assertTrue(sessions.consume("Notch", LOOPBACK).isEmpty(),
+            "an expired session must never be consumed after its TTL");
+        assertTrue(sessions.find("Notch", LOOPBACK).isEmpty());
+        assertFalse(sessions.hasLiveAlias("Notch", first.remoteIp()));
+        assertEquals(0, sessions.size());
+
+        assertTrue(sessions.put(session("connection-b", verified())),
+            "a new connection must be able to replace the expired one");
+        assertEquals("connection-b", sessions.find("Notch", LOOPBACK).orElseThrow().connectionId());
+    }
+
+    @Test
     void consumeIsOneShotAndClearsBothIndexes() {
         VerifiedSessions sessions = new VerifiedSessions();
         VerifiedSession first = session("connection-a", verified());

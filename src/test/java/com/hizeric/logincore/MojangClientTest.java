@@ -1,17 +1,21 @@
 package com.hizeric.logincore;
 
 import com.sun.net.httpserver.HttpServer;
+import com.hizeric.logincore.decision.LoginDecisionEngine;
 import com.hizeric.logincore.mojang.LookupCache;
 import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.mojang.RateBudget;
+import com.hizeric.logincore.storage.Storage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.http.HttpClient;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.UUID;
 import java.util.ArrayList;
@@ -29,6 +33,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class MojangClientTest {
 
     private final List<HttpServer> servers = new ArrayList<>();
+
+    @TempDir
+    Path temporaryDirectory;
 
     @AfterEach
     void stopServers() {
@@ -90,6 +97,59 @@ public class MojangClientTest {
 
             assertEquals(LookupResult.Type.UNKNOWN, result.type());
             assertFalse(result.isPremium());
+        }
+    }
+
+    @Test
+    void lookupNameTimeoutIsUnknownAndNeverOffline() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/lookup", exchange -> {
+            // 6s exceeds MojangClient's 5s per-request timeout, forcing the IOException-to-UNKNOWN path.
+            try {
+                Thread.sleep(6000);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+            }
+            try {
+                byte[] payload = "too slow".getBytes();
+                exchange.sendResponseHeaders(200, payload.length);
+                try (OutputStream body = exchange.getResponseBody()) {
+                    body.write(payload);
+                }
+            } catch (IOException ignored) {
+                // The client already timed out and closed the connection.
+            }
+        });
+        server.start();
+        try {
+            MojangClient client = new MojangClient(
+                HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(2))
+                    .build(),
+                "http://localhost:" + server.getAddress().getPort() + "/lookup/%s",
+                null,
+                new LookupCache(),
+                new RateBudget(100, Duration.ofMinutes(10), 10, Duration.ofMinutes(1)));
+
+            LookupResult result = client.lookupName("TimeoutGuy", "127.0.0.1");
+
+            assertEquals(LookupResult.Type.UNKNOWN, result.type());
+            assertEquals("lookup-request-failed", result.reason());
+            assertFalse(result.isPremium());
+            assertFalse(result.isNotPremium());
+
+            LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(
+                new LoginDecisionEngine.DecisionInput("TimeoutGuy", false, true, result,
+                    false, null, null, false, false, false, null));
+            assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, decision);
+            assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, result, false));
+
+            try (Storage storage = new Storage(temporaryDirectory.resolve("timeout.db"))) {
+                assertTrue(storage.classification("TimeoutGuy").get().isEmpty());
+                assertEquals(0, storage.summary().get().classifications());
+            }
+        } finally {
+            server.stop(0);
         }
     }
 
