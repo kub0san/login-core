@@ -5,13 +5,13 @@ before any vendored source is committed.
 
 ## Upstream project
 
-- Project: [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded)
-- Licence: GPL-3.0
-- Exact commit vendored from: `56e9a66b`
+- Vendored source: [jBCrypt 0.4](https://github.com/jeremyh/jBCrypt) (Damien Miller, ISC), tree `e015c2c`. This is the actual source of the vendored file below.
+- Behavioural reference only: [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) @ `56e9a66b` (GPL-3.0). No code is vendored from AuthMe.
 
-The vendored file below is a self-contained public-domain BCrypt implementation
-(jBCrypt 0.4, Damien Miller, ISC), vendored because AuthMe's own BCrypt wrappers
-at `56e9a66b` delegate to BouncyCastle, which login-core does not ship.
+The vendored file below is a self-contained BCrypt implementation from jBCrypt
+0.4 (ISC). AuthMe's own BCrypt wrappers at `56e9a66b` define the accepted
+`$2b$`/`$2y$` behaviour but delegate to BouncyCastle, which login-core does not
+ship; they are a reference, not a source of copied code.
 
 ## Vendored files
 
