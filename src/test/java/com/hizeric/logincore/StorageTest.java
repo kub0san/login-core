@@ -100,6 +100,36 @@ class StorageTest {
     }
 
     @Test
+    void authoritativeNotFoundClassifiesOffline() throws Exception {
+        Path database = temporaryDirectory.resolve("offline.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            storage.setClassification("OfflineGuy", "OFFLINE").get();
+
+            assertEquals("OFFLINE", storage.classification("OFFLINEGUY").get().orElseThrow());
+            assertEquals("OFFLINE", classification(connection, "offlineguy"),
+                "the persisted row, not just the setter call, must read OFFLINE");
+            assertTrue(storage.link("OfflineGuy").get().isEmpty(),
+                "OFFLINE is recorded without a premium link row");
+            assertEquals(1, storage.summary().get().classifications());
+        }
+    }
+
+    @Test
+    void offlineClassificationIsWriteOnce() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("offline-lock.db"))) {
+            assertEquals(Storage.ClassificationResult.SET,
+                storage.setClassification("OfflineGuy", "OFFLINE").get());
+            assertEquals(Storage.ClassificationResult.ALREADY_DIFFERENT,
+                storage.setClassification("OFFLINEGUY", "PREMIUM").get());
+            assertFalse(storage.commitPremiumIdentity("OfflineGuy", UUID, "OfflineGuy", "AUTO").get());
+
+            assertEquals("OFFLINE", storage.classification("offlineguy").get().orElseThrow());
+            assertTrue(storage.link("OfflineGuy").get().isEmpty(),
+                "a later PREMIUM attempt must not add a link to an OFFLINE account");
+        }
+    }
+
+    @Test
     void invalidClassificationValueIsRejected() throws Exception {
         Path database = temporaryDirectory.resolve("invalid.db");
         try (Storage storage = new Storage(database)) {

@@ -119,8 +119,13 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         try {
             CompletableFuture<Boolean> registered = CompletableFuture.supplyAsync(
                 () -> authMe.isRegistered(name), workers);
+            CompletableFuture<Optional<String>> storedClassification = storage.classification(name);
             storage.account(name)
                 .thenCombineAsync(registered, (account, isRegistered) -> new AccountContext(account, isRegistered), workers)
+                .thenCombineAsync(storedClassification, (context, classification) -> {
+                    context.storedClassification = classification.orElse(null);
+                    return context;
+                }, workers)
                 .thenApplyAsync(context -> {
                     context.lookupResult = mojang.lookupName(name, remoteIp);
                     return context;
@@ -163,7 +168,8 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             attempt.uuidHint,
             false,
             isShadowMode(),
-            getConfigBoolean("on-lookup-failure", "DENY").equalsIgnoreCase("ALLOW")
+            getConfigBoolean("on-lookup-failure", "DENY").equalsIgnoreCase("ALLOW"),
+            context.storedClassification
         );
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
 
@@ -174,12 +180,25 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             return;
         }
         switch (decision) {
-            case PASS_THROUGH -> reinjectOriginal(attempt);
+            case PASS_THROUGH -> persistOfflineClassification(attempt,
+                LoginDecisionEngine.shouldClassifyOffline(decision, context.lookupResult, link.isPresent()));
             case DISCONNECT_NAME_RESERVED -> disconnect(attempt, "name-reserved");
             case KICK_ACCOUNT_CONFLICT -> disconnect(attempt, "account-conflict");
             case KICK_VERIFY_FAILED -> disconnect(attempt, "lookup-unavailable");
             case HANDSHAKE_REQUIRED -> beginHandshake(attempt, context, link);
         }
+    }
+
+    /** Persist an authoritative OFFLINE classification before letting the cracked login through. */
+    private void persistOfflineClassification(Attempt attempt, boolean shouldClassify) {
+        if (!shouldClassify) {
+            reinjectOriginal(attempt);
+            return;
+        }
+        OfflineClassification.write(storage, attempt.name,
+            () -> runOnChannel(attempt, () -> reinjectOriginal(attempt)),
+            key -> runOnChannel(attempt, () -> disconnect(attempt, key)),
+            message -> plugin.getLogger().warning(message));
     }
 
     private void beginHandshake(Attempt attempt, AccountContext context, Optional<Storage.Link> link) {
@@ -540,6 +559,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         private final Storage.AccountState account;
         private final boolean registered;
         private LookupResult lookupResult;
+        private String storedClassification;
 
         private AccountContext(Storage.AccountState account, boolean registered) {
             this.account = account;

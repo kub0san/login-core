@@ -40,7 +40,8 @@ public final class LoginDecisionEngine {
         UUID uuidHint,
         boolean handshakeSuccess,
         boolean shadowMode,
-        boolean allowLookupFailure
+        boolean allowLookupFailure,
+        String storedClassification
     ) {
     }
 
@@ -58,8 +59,20 @@ public final class LoginDecisionEngine {
         if (input.exempt()) {
             return Decision.PASS_THROUGH;
         }
+        // OFFLINE cannot become PREMIUM, even if a handshake somehow succeeded.
+        if ("OFFLINE".equals(input.storedClassification())
+            && input.lookupResult() != null && input.lookupResult().isPremium()) {
+            return Decision.DISCONNECT_NAME_RESERVED;
+        }
         if (input.handshakeSuccess()) {
             return Decision.PASS_THROUGH;
+        }
+        // A stored PREMIUM name never falls through to password/pass-through on a live
+        // result that is not premium; only a completed handshake grants it. If no UUID
+        // is available, beginHandshake fails closed before any grant.
+        if ("PREMIUM".equals(input.storedClassification())
+            && input.lookupResult() != null && !input.lookupResult().isPremium()) {
+            return Decision.HANDSHAKE_REQUIRED;
         }
         if (input.lookupResult() != null && input.lookupResult().isNotPremium()) {
             return input.hasLink() ? Decision.HANDSHAKE_REQUIRED : Decision.PASS_THROUGH;
@@ -80,6 +93,17 @@ public final class LoginDecisionEngine {
             return Decision.PASS_THROUGH;
         }
         return Decision.KICK_VERIFY_FAILED;
+    }
+
+    /**
+     * OFFLINE is an authoritative-absence classification: only an allowed, unlinked login whose
+     * lookup proved absence writes it. An UNKNOWN lookup is inconclusive and stays unclassified.
+     */
+    public static boolean shouldClassifyOffline(Decision decision, LookupResult lookupResult, boolean hasLink) {
+        return decision == Decision.PASS_THROUGH
+            && lookupResult != null
+            && lookupResult.isNotPremium()
+            && !hasLink;
     }
 
     public static PostVerifyAction decidePostVerify(boolean handshakeSucceeded, UUID verifiedUuid,
