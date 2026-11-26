@@ -141,6 +141,45 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void renamedPremiumGetsRenameConflictNotGeneric() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("rename-conflict.db"))) {
+            storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session("new"));
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, grants);
+            AsyncPlayerPreLoginEvent event = event("new");
+
+            listener.onAsyncPreLogin(event);
+
+            assertTrue(grants.isEmpty(), "a rename conflict must not grant access");
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
+            assertTrue(event.getKickMessage().contains("rename-conflict"), event.getKickMessage());
+            assertEquals("old", storage.link("old").get().orElseThrow().name(),
+                "the existing link must not be adopted or rewritten");
+            assertEquals(UUID_TEXT, storage.link("old").get().orElseThrow().mojangUuid());
+            assertEquals(1, storage.summary().get().links(), "no new link may be written");
+        }
+    }
+
+    @Test
+    void unknownUuidStillRegistersNormally() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("unknown-uuid.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session("fresh"));
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, grants);
+            AsyncPlayerPreLoginEvent event = event("fresh");
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertEquals(List.of("fresh"), grants);
+            assertEquals(UUID_TEXT, storage.link("fresh").get().orElseThrow().mojangUuid());
+        }
+    }
+
+    @Test
     void passwordOnceCommitsAtPreLoginAndSurvivesUntilLoginEvent() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("password-once.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
@@ -305,17 +344,21 @@ class CommitBeforeGrantTest {
     }
 
     private static AsyncPlayerPreLoginEvent event() throws Exception {
+        return event("Notch");
+    }
+
+    private static AsyncPlayerPreLoginEvent event(String name) throws Exception {
         // Supplying a profile avoids Bukkit.createProfile(), which needs a live Server.
         UUID uniqueId = UUID.randomUUID();
         com.destroystokyo.paper.profile.PlayerProfile profile = (com.destroystokyo.paper.profile.PlayerProfile)
             Proxy.newProxyInstance(com.destroystokyo.paper.profile.PlayerProfile.class.getClassLoader(),
                 new Class<?>[]{com.destroystokyo.paper.profile.PlayerProfile.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "getName" -> "Notch";
+                    case "getName" -> name;
                     case "getId" -> uniqueId;
                     default -> null;
                 });
-        return new AsyncPlayerPreLoginEvent("Notch", InetAddress.getByName("127.0.0.1"), uniqueId, true, profile);
+        return new AsyncPlayerPreLoginEvent(name, InetAddress.getByName("127.0.0.1"), uniqueId, true, profile);
     }
 
     private static Player player() {
@@ -329,6 +372,13 @@ class CommitBeforeGrantTest {
 
     private static VerifiedSession session() {
         return session(false, false);
+    }
+
+    private static VerifiedSession session(String name) {
+        return new VerifiedSession(
+            "connection", name, "127.0.0.1",
+            MojangClient.SessionResult.verified(UUID.fromString(UUID_TEXT), name),
+            Optional.empty(), false, false, false, true, "AUTO");
     }
 
     private static VerifiedSession passwordOnceSession() {
@@ -354,6 +404,7 @@ class CommitBeforeGrantTest {
     private static Plugin plugin() {
         FileConfiguration config = new YamlConfiguration();
         config.set("messages.account-conflict", "<red>account-conflict</red>");
+        config.set("messages.rename-conflict", "<red>rename-conflict</red>");
         return (Plugin) Proxy.newProxyInstance(Plugin.class.getClassLoader(), new Class<?>[]{Plugin.class},
             (proxy, method, args) -> switch (method.getName()) {
                 case "getConfig" -> config;

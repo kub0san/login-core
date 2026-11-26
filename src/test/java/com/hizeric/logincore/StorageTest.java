@@ -307,6 +307,19 @@ class StorageTest {
     }
 
     @Test
+    void linkByUuidIsAReadOnlyNameLookup() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("by-uuid.db"))) {
+            assertTrue(storage.linkByUuid(UUID).get().isEmpty());
+            storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
+
+            Storage.Link found = storage.linkByUuid(UUID).get().orElseThrow();
+            assertEquals("notch", found.name());
+            assertEquals(UUID, found.mojangUuid());
+            assertEquals(1, storage.summary().get().links());
+        }
+    }
+
+    @Test
     void legacyPremiumLinkIsClassifiedPremium() throws Exception {
         Path database = temporaryDirectory.resolve("migration-premium.db");
         try (Storage storage = new Storage(database)) {

@@ -192,6 +192,11 @@ public final class Storage implements AutoCloseable {
         return submit(() -> findLink(normalize(name)));
     }
 
+    /** Read-only lookup of the name linked to a premium UUID (name-keyed via links.name_lower). */
+    public CompletableFuture<Optional<Link>> linkByUuid(String mojangUuid) {
+        return submit(() -> findLinkByUuid(mojangUuid));
+    }
+
     public CompletableFuture<ClassificationResult> setClassification(String name, String classification) {
         String normalizedName = classificationKey(name);
         String normalizedClassification = classification == null ? "" : classification.trim().toUpperCase(Locale.ROOT);
@@ -461,6 +466,19 @@ public final class Storage implements AutoCloseable {
                     return Optional.empty();
                 }
                 return Optional.of(new Link(normalizedName, result.getString(1), result.getString(2), result.getString(3)));
+            }
+        }
+    }
+
+    private Optional<Link> findLinkByUuid(String mojangUuid) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT name_lower, canonical_name, source FROM links WHERE mojang_uuid = ?")) {
+            statement.setString(1, mojangUuid);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new Link(result.getString(1), mojangUuid, result.getString(2), result.getString(3)));
             }
         }
     }

@@ -119,10 +119,20 @@ public final class AuthMeLoginListener implements Listener {
 
         try {
             // Single join, on the async pre-login thread: never on the main thread.
+            String mojangUuid = session.mojangSession().uuid().toString();
+            if (session.link().isEmpty()) {
+                Optional<Storage.Link> byUuid = storage.linkByUuid(mojangUuid).join();
+                if (byUuid.isPresent() && !byUuid.get().name().equalsIgnoreCase(session.name())) {
+                    plugin.getLogger().warning("Premium UUID " + mojangUuid + " is already linked to "
+                        + byUuid.get().name() + "; refusing rename to " + session.name()
+                        + " (the old link is left untouched)");
+                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("rename-conflict"));
+                    return;
+                }
+            }
             boolean committed;
             try {
-                committed = storage.commitPremiumIdentity(session.name(),
-                    session.mojangSession().uuid().toString(),
+                committed = storage.commitPremiumIdentity(session.name(), mojangUuid,
                     session.mojangSession().canonicalName(), session.linkSource()).join();
             } catch (CompletionException | RejectedExecutionException ex) {
                 committed = false;

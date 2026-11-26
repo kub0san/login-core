@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AdminCommandTest {
 
+    private static final String UUID_TEXT = "069a79f4-44e9-4726-a5be-fca90e38a0e1";
+
     @TempDir
     Path temporaryDirectory;
 
@@ -42,6 +44,21 @@ class AdminCommandTest {
             assertTrue(line.contains("classification: PREMIUM"), line);
             assertEquals("PREMIUM", storage.classification("NOTCH").get().orElseThrow());
             assertEquals(1, storage.summary().get().classifications());
+        }
+    }
+
+    @Test
+    void statusShowsLinkedNameForUuidConflict() throws Exception {
+        Path database = temporaryDirectory.resolve("conflict-status.db");
+        try (Storage storage = new Storage(database)) {
+            storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
+
+            String line = AdminCommand.statusLine(storage.account("New").get(), false,
+                storage.classification("New").get(), storage.linkByUuid(UUID_TEXT).get());
+
+            assertTrue(line.contains("linked-name: old"), line);
+            assertEquals(UUID_TEXT, storage.link("old").get().orElseThrow().mojangUuid(),
+                "status display must not rewrite the link");
         }
     }
 

@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -148,8 +149,16 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
 
     private void showPlayerStatus(CommandSender sender, String name) {
         CompletableFuture<Boolean> registered = CompletableFuture.supplyAsync(() -> authMe.isRegistered(name), workers);
-        storage.account(name).thenCombineAsync(registered, (account, isRegistered) ->
-            statusLine(account, isRegistered, storage.classification(name).join()), workers)
+        CompletableFuture<Optional<String>> classification = storage.classification(name);
+        CompletableFuture<Storage.AccountState> account = storage.account(name);
+        // A renamed premium name has no link of its own; resolve its UUID to surface the stale link.
+        CompletableFuture<Optional<Storage.Link>> uuidLink = CompletableFuture.supplyAsync(() -> {
+            UUID uuid = mojang.lookupName(name).mojangUuid();
+            return uuid == null ? Optional.empty() : storage.linkByUuid(uuid.toString()).join();
+        }, workers);
+        CompletableFuture.allOf(account, registered, classification, uuidLink)
+            .thenApplyAsync(ignored -> statusLine(account.join(), registered.join(), classification.join(),
+                uuidLink.join()), workers)
             .whenComplete((result, error) -> onMain(sender, () -> {
                 if (error != null) {
                     reportError(sender, error);
@@ -161,9 +170,17 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
 
     /** Read-only status text; classification is reported, never written here. */
     static String statusLine(Storage.AccountState account, boolean registered, Optional<String> classification) {
+        return statusLine(account, registered, classification, Optional.empty());
+    }
+
+    /** Read-only status text; a UUID linked under another name is shown, never rewritten. */
+    static String statusLine(Storage.AccountState account, boolean registered, Optional<String> classification,
+                             Optional<Storage.Link> uuidLink) {
         String link = account.link().map(value -> value.mojangUuid() + " (" + value.source() + ")").orElse("none");
-        return "AuthMe registered: " + registered + ", link: " + link + ", exempt: " + account.exempt()
-            + ", classification: " + classification.orElse("UNCLASSIFIED");
+        String conflict = uuidLink.filter(value -> account.link().isEmpty())
+            .map(value -> ", linked-name: " + value.name()).orElse("");
+        return "AuthMe registered: " + registered + ", link: " + link + conflict
+            + ", exempt: " + account.exempt() + ", classification: " + classification.orElse("UNCLASSIFIED");
     }
 
     private void handleExempt(CommandSender sender, String[] args) {
