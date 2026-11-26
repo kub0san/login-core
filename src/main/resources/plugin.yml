@@ -1,4 +1,4 @@
-name: AuthMePAL
+name: AuthMe
 version: '${version}'
 main: com.hizeric.logincore.LoginCore
 description: Securely verifies Mojang account ownership and automates AuthMe logins on offline-mode Paper servers.

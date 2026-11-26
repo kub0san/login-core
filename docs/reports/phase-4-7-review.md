@@ -72,7 +72,23 @@ The spec (§4, §16) requires a standalone plugin that "must not depend on a sep
 4. **Live E2E**: restore AuthMe on test server, deploy, run Craftwire scenarios, record evidence.
 5. **Independent review**: launch security + architecture review agents (Phase 9) before final acceptance.
 
-## 6. Files to examine
+## 7. Standalone scope reality (added after user decision)
+
+The user confirmed: "A stripped down version of authme is FINAL." This means standalone is the goal, and AuthMe should be vendored as the foundation, not kept as a runtime dependency.
+
+**However, true standalone requires implementing password authentication** (`/login`, `/register`, `/changepassword`, password verification against stored hashes, authenticated-state tracking, and login events). login-core currently delegates ALL of this to AuthMe. The `AuthMeBridge` and `AuthMeLoginListener` depend on:
+- `AuthMeApi.isRegistered/isAuthenticated/forceLogin/forceLoginFromProxy/forceRegister/registerPlayer`
+- `LoginEvent` and `RestoreSessionEvent` (AuthMe event classes)
+- AuthMe's `/login` command and password verification pipeline
+
+Vendoring the data layer alone (schema + hash + registration insert) is NOT sufficient — the password login FLOW must also be implemented. This is estimated ~3,000–5,000 LOC and is the single largest remaining effort.
+
+**Recommended path** (user authorized "other calls"):
+1. **Short-term (this branch)**: Keep AuthMe as a runtime dependency for password auth. Fix plugin.yml name (done → `AuthMe`). This keeps the plugin functional and shippable.
+2. **Medium-term**: Implement password auth in login-core (commands + verification + state tracking + events). Then remove AuthMe from `depend`/`compileOnly`. This is the actual standalone conversion.
+3. **Alternatively**: Formally amend the spec to accept the bridge model (login-core as premium-identity layer on top of AuthMe), which is what the implementation actually is. This is the lower-risk option and matches the current codebase.
+
+The "thin vendor" in ADR 0008 (schema + hash + registration insert + state tracking + events façade) was only partially executed: schema + hash done, registration/state/events still route through AuthMe. Full standalone requires completing the password auth flow, not just the data layer.
 - `plugin.yml` (name, depend)
 - `build.gradle.kts` (compileOnly authme-core)
 - `LoginCore.java` (onEnable AuthMe check)
