@@ -237,17 +237,117 @@ public final class Storage implements AutoCloseable {
         });
     }
 
-    /** Records a successful login on an existing authme row (no row is inserted). */
-    public CompletableFuture<Void> markLoggedIn(String name) {
+    /** Registers a new offline account with a BCrypt password hash. Returns false if the name is already registered. */
+    public CompletableFuture<Boolean> registerPlayer(String name, String password) {
+        if (name == null || name.isBlank() || password == null || password.isBlank()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        String hash = com.hizeric.logincore.authme.BCrypt.gensalt(12);
+        String hashed = com.hizeric.logincore.authme.BCrypt.hashpw(password, hash);
+        String normalized = normalize(name);
+        return submit(() -> {
+            // Check existing
+            try (PreparedStatement check = connection.prepareStatement(
+                    "SELECT 1 FROM authme WHERE username = ? COLLATE NOCASE")) {
+                check.setString(1, normalized);
+                try (ResultSet rs = check.executeQuery()) {
+                    if (rs.next()) {
+                        return false;
+                    }
+                }
+            }
+            try (PreparedStatement insert = connection.prepareStatement("""
+                INSERT INTO authme (username, password, regdate, regip, realname, playerUUID, isLogged, hasSession)
+                VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                """)) {
+                insert.setString(1, normalized);
+                insert.setString(2, hashed);
+                insert.setLong(3, Instant.now().toEpochMilli());
+                insert.setString(4, "127.0.0.1");
+                insert.setString(5, name);
+                insert.setString(6, offlineUuid(name));
+                insert.executeUpdate();
+                return true;
+            }
+        });
+    }
+
+    /** Verifies a plain password against the stored BCrypt hash. Returns false if no account or unsupported hash. */
+    public CompletableFuture<Boolean> verifyPassword(String name, String password) {
+        if (name == null || name.isBlank() || password == null) {
+            return CompletableFuture.completedFuture(false);
+        }
         return submit(() -> {
             try (PreparedStatement statement = connection.prepareStatement(
-                "UPDATE authme SET isLogged = 1, lastlogin = ? WHERE username = ? COLLATE NOCASE")) {
+                    "SELECT password FROM authme WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, normalize(name));
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) {
+                        return false;
+                    }
+                    String hash = result.getString(1);
+                    return com.hizeric.logincore.authme.AuthMePasswords.verify(password, hash);
+                }
+            }
+        });
+    }
+
+    /** Marks an account as logged in. */
+    public CompletableFuture<Void> setLoggedIn(String name) {
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE authme SET isLogged = 1, lastlogin = ? WHERE username = ? COLLATE NOCASE")) {
                 statement.setLong(1, Instant.now().toEpochMilli());
-                statement.setString(2, name);
+                statement.setString(2, normalize(name));
                 statement.executeUpdate();
                 return null;
             }
         });
+    }
+
+    /** @deprecated Use {@link #setLoggedIn(String)}. */
+    public CompletableFuture<Void> markLoggedIn(String name) {
+        return setLoggedIn(name);
+    }
+
+    /** Marks an account as logged out. */
+    public CompletableFuture<Void> setLoggedOut(String name) {
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                    "UPDATE authme SET isLogged = 0 WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, normalize(name));
+                statement.executeUpdate();
+                return null;
+            }
+        });
+    }
+
+    /** Changes password after verifying the old one. Returns false if old password is wrong or account missing. */
+    public CompletableFuture<Boolean> changePassword(String name, String oldPassword, String newPassword) {
+        if (name == null || name.isBlank() || oldPassword == null || newPassword == null
+                || newPassword.isBlank()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return verifyPassword(name, oldPassword).thenCompose(ok -> {
+            if (!ok) {
+                return CompletableFuture.completedFuture(false);
+            }
+            String hash = com.hizeric.logincore.authme.BCrypt.gensalt(12);
+            String hashed = com.hizeric.logincore.authme.BCrypt.hashpw(newPassword, hash);
+            return submit(() -> {
+                try (PreparedStatement statement = connection.prepareStatement(
+                        "UPDATE authme SET password = ? WHERE username = ? COLLATE NOCASE")) {
+                    statement.setString(1, hashed);
+                    statement.setString(2, normalize(name));
+                    return statement.executeUpdate() > 0;
+                }
+            });
+        });
+    }
+
+    private static String offlineUuid(String name) {
+        // Paper's offline UUID: UUID.nameUUIDFromBytes("OfflinePlayer:" + name)
+        return java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
     }
 
     public CompletableFuture<ClassificationResult> setClassification(String name, String classification) {
