@@ -12,3 +12,23 @@ logs/
 *.iws
 .DS_Store
 Thumbs.db
+# agent / tooling scratch (local-only)
+.snapshots/
+.scratch/
+.superpowers/
+.planning/
+# local-only docs / agent metadata (mirrors pvp-core and shenanigans-core)
+/AGENTS.md
+/mempalace.yaml
+/GLOSSARY.md
+entities.json
+codereview-*.md
+/docs/agents/
+/docs/superpowers/
+# temp scratch artifacts
+.tmp_*
+# JVM crash dumps
+hs_err_pid*.log
+replay_pid*.log
+# upstream behavioural reference (read-only, local-only)
+AuthMeReloaded-ref/

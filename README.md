@@ -4,6 +4,25 @@ AuthMePAL securely verifies Mojang account ownership on offline-mode Paper serve
 
 **Author:** hizeric
 
+## Project Layout
+
+- `src/main/java/` — `org.authmePAL` plus the `authme`, `command`, `decision`,
+  `handshake`, `migration`, `mojang`, `session` and `storage` packages.
+- `src/main/resources/` — `plugin.yml` and `config.yml`.
+- `src/test/java/` — JUnit 5 tests for the decision engine, Mojang lookup/session
+  parsing, cache/rate-budget behaviour and SQLite persistence.
+- `docs/` — project notes (`DEVIATIONS.md`, `SPIKE_RESULTS.md`) and the `adr/`,
+  `agents/` and `superpowers/` subdirectories.
+- `gradle/` — Gradle wrapper.
+- `.planning/`, `.scratch/` and `.snapshots/` — agent-managed planning, issues/specs
+  and local snapshots; gitignored.
+- `AuthMeReloaded-ref/` — gitignored, read-only clone of the upstream project used
+  as a behavioural reference; no source from it is copied into `src/`.
+- Root files — `AGENTS.md` and `GLOSSARY.md` (local-only agent guidance),
+  `mempalace.yaml` (local-only memory config), `PLAN.md`, `CREDITS.md`,
+  `LICENSE`, `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`,
+  `gradlew` / `gradlew.bat`.
+
 ## Requirements
 
 - Paper 26.2 and Java 25
@@ -76,3 +95,7 @@ The user reports that the previous build's login features worked on their server
 ## Credits
 
 AuthMePAL's login flow design was adapted from [FastLogin](https://github.com/games647/FastLogin) (MIT) and [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (GPL-3.0), implemented from scratch against Mojang's public session protocol. No source code was copied from either project. Full provenance, dependency versions, and licences are in [CREDITS.md](./CREDITS.md).
+
+## License
+
+AuthMePAL is licensed under the GNU General Public License v3.0 (GPL-3.0). See [LICENSE](./LICENSE) for the full text.

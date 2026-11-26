@@ -80,7 +80,10 @@ JUnit 5 (EPL-2.0), Netty (Apache-2.0), Gson (Apache-2.0), SQLite JDBC (Apache-2.
 
 ## 4. Licence of AuthMePAL itself
 
-**To be decided.** The project is intended to be published as open source; the
-specific licence will be chosen before the repository is made public.
+AuthMePAL is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
+This is the author's own decision, recorded on 2026-11-26. The full licence text
+is in the root [LICENSE](./LICENSE) file.
 
-Until a `LICENSE` file exists, all rights are reserved by the author.
+As recorded in section 1, no source code was copied from AuthMeReloaded or
+FastLogin. This licence is the project's own choice, not a copyleft obligation
+inherited from those projects.
