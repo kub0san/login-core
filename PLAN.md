@@ -18,7 +18,7 @@
 
 # Implementation Plan
 
-> Hand-off document for a coding agent. Project name: **AuthMePAL**
+> Hand-off document for a coding agent. Project name: **login-core** (repo name; runtime plugin name is still `AuthMePAL`)
 > Last researched: 19 Oct 2026. Items tagged **[VERIFY]** are assumptions I could not confirm from documentation. Verify them in Phase 0 before building on them.
 > **Status updated: 22 Oct 2026.** The plan below is the original hand-off document; §15 records what was actually built, what is stale in the plan text, and the full defect/edge-case audit. Where they disagree, §15 wins.
 
@@ -102,11 +102,11 @@ tasks.runServer {
 
 ## 3. Architecture
 
-> **As built** (verified 22 Oct 2026). The original sketch below is superseded: the package was renamed, the `config/` package was never created (config is read directly in `AuthMePAL`), the listener is `PremiumLoginListener`, and the state enum is `LoginFlowState` (`docs/DEVIATIONS.md:4-5`).
+> **As built** (verified 22 Oct 2026). The original sketch below is superseded: the package was renamed to `com.hizeric.logincore`, the `config/` package was never created (config is read directly in `LoginCore`), the listener is `PremiumLoginListener`, and the state enum is `LoginFlowState` (`docs/DEVIATIONS.md:4-5`).
 
 ```
-org.authmePAL
-├── AuthMePAL.java                // JavaPlugin: wiring, worker pool, startup guards, ordered shutdown
+com.hizeric.logincore
+├── LoginCore.java                // JavaPlugin: wiring, worker pool, startup guards, ordered shutdown
 ├── mojang/
 │   ├── MojangClient.java         // name->uuid lookup, hasJoined; base URLs configurable (test seam)
 │   ├── LookupResult.java         // PREMIUM(uuid,canonicalName) | NOT_PREMIUM | UNKNOWN(reason)
@@ -117,7 +117,7 @@ org.authmePAL
 │   ├── LoginFlowState.java       // per-connection state enum (renamed to avoid PacketEvents collision)
 │   ├── EncryptionKeys.java       // RSA-1024 keypair created at startup
 │   ├── CipherInstaller.java      // installs AES/CFB8 handlers in the Netty pipeline
-│   ├── LoginMetrics.java         // counters surfaced by /authmepal status
+│   ├── LoginMetrics.java         // counters surfaced by /logincore status
 │   └── ServerHash.java           // Minecraft's signed-hex SHA-1
 ├── decision/
 │   └ LoginDecisionEngine.java    // pure logic: inputs -> Action (unit-testable, no I/O)
@@ -129,13 +129,13 @@ org.authmePAL
 ├── session/
 │   └── VerifiedSessions.java     // short-lived, one-shot, keyed by name@ip (see DEVIATIONS.md:6)
 ├── command/
-│   └── AdminCommand.java         // /authmepal status|exempt|link|unlink|migrate
+│   └── AdminCommand.java         // /logincore status|exempt|link|unlink|migrate
 └── migration/
     └── MigrationAudit.java
 ```
 Rules: `LoginDecisionEngine` has **no** PacketEvents/Bukkit/AuthMe imports (honoured). `AuthMeBridge` isolates AuthMe so an API change touches one file (honoured).
 
-**Test classes** (`src/test/java/org/authmePAL/`): `ServerHashTest`, `MojangClientTest`, `LoginDecisionEngineTest`, `StorageTest`, `VerifiedSessionTest`, `CipherInstallerTest`, `SpikeS4Test`.
+**Test classes** (`src/test/java/com/hizeric/logincore/`): `ServerHashTest`, `MojangClientTest`, `LoginDecisionEngineTest`, `StorageTest`, `VerifiedSessionTest`, `CipherInstallerTest`, `SpikeS4Test`.
 
 ---
 
@@ -356,7 +356,7 @@ Write each answer in `docs/SPIKE_RESULTS.md` with evidence (log lines, javadoc l
 | **M5 AuthMe integration + storage** | **Done — live verification pending** | `AuthMeBridge`, `Storage`, post-verify table (`LoginDecisionEngine:85-105`), `AuthMeLoginListener`, startup guard. All six "Done when" behaviours are implemented in code; none confirmed on a live server yet. |
 | **M6 Premium UUID mode** | **Done — live test pending** | Profile applied at `EventPriority.LOWEST` (`AuthMeLoginListener:51-61`) using `VerifiedSessions.playerUuid`. |
 | **M7 Migration tooling** | **Done** | `AdminCommand` + `MigrationAudit` (resumable CSV). Note: the audit **always resumes** the existing CSV rather than starting a fresh pass (defect F-06). |
-| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/authmepal status` counters, README (incl. verification limits), example config, `CREDITS.md`. **Missing:** CI (no `.github/`); `LICENSE` not chosen yet. `LICENSE`+`NOTICE` "only if you reused FastLogin code" does not apply — no code was reused. |
+| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/logincore status` counters, README (incl. verification limits), example config, `CREDITS.md`. **Missing:** CI (no `.github/`); `LICENSE` not chosen yet. `LICENSE`+`NOTICE` "only if you reused FastLogin code" does not apply — no code was reused. |
 
 ---
 
@@ -424,7 +424,7 @@ Starting from an **empty database** nothing here is required. It matters if you 
    - Locked-out real owner (squatter registered first)? Admin runs `/authmepal link <name> <uuid>` after `/authme unregister <name>`, or `/authmepal unlink <name>`.
 5. **Switch to `ENFORCE`.**
 
-Admin commands (permission `authmepal.admin`): `/authmepal status <name>` (link, exempt, AuthMe registered — **the lookup result promised here is not implemented**, see F-16), `/authmepal exempt add|remove|list [name]`, `/authmepal link <name> <uuid|auto>`, `/authmepal unlink <name>`, `/authmepal migrate audit`, `/authmepal migrate apply ...`. Subcommands/options and online player names have tab completion.
+Admin commands (permission `logincore.admin`): `/logincore status <name>` (link, exempt, AuthMe registered — **the lookup result promised here is not implemented**, see F-16), `/logincore exempt add|remove|list [name]`, `/logincore link <name> <uuid|auto>`, `/logincore unlink <name>`, `/logincore migrate audit`, `/logincore migrate apply ...`. Subcommands/options and online player names have tab completion.
 
 ---
 

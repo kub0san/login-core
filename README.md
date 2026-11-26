@@ -6,7 +6,7 @@ login-core securely verifies Mojang account ownership on offline-mode Paper serv
 
 ## Project Layout
 
-- `src/main/java/` — `org.authmePAL` plus the `authme`, `command`, `decision`,
+- `src/main/java/` — `com.hizeric.logincore` plus the `authme`, `command`, `decision`,
   `handshake`, `migration`, `mojang`, `session` and `storage` packages.
 - `src/main/resources/` — `plugin.yml` and `config.yml`.
 - `src/test/java/` — JUnit 5 tests for the decision engine, Mojang lookup/session
@@ -36,7 +36,7 @@ AuthMePAL is for a direct Paper server, not a proxy network. An offline-mode ser
 ## Install and configure
 
 1. Back up the server and AuthMe data.
-2. Install PacketEvents and AuthMe, remove any old AuthmePAL jar, and place `AuthMePAL-*.jar` in the server's `plugins` directory.
+2. Install PacketEvents and AuthMe, remove any old jar, and place `login-core-1.0-SNAPSHOT.jar` in the server's `plugins` directory.
 3. Set `online-mode=false` and set AuthMe `settings.enablePremium: false`.
 4. Start the server once to create `plugins/AuthMePAL/config.yml`.
 5. Start with `mode: SHADOW` and review the server log before enabling enforcement. SHADOW performs name lookups and logs decisions but does not start the premium handshake or block the login.
@@ -62,17 +62,17 @@ Newly encountered premium identities are registered with AuthMe and auto-logged-
 
 ## Administration
 
-All commands require `authmepal.admin` (default: operators). The command is `/authmepal`; tab completion is available for subcommands, options, and online player names.
+All commands require `logincore.admin` (default: operators). The command is `/logincore`; tab completion is available for subcommands, options, and online player names.
 
 ```text
-/authmepal status [name]
-/authmepal exempt add <name>
-/authmepal exempt remove <name>
-/authmepal exempt list
-/authmepal link <name> <uuid|auto>
-/authmepal unlink <name>
-/authmepal migrate audit
-/authmepal migrate apply --exempt-conflicts [--except name,name]
+/logincore status [name]
+/logincore exempt add <name>
+/logincore exempt remove <name>
+/logincore exempt list
+/logincore link <name> <uuid|auto>
+/logincore unlink <name>
+/logincore migrate audit
+/logincore migrate apply --exempt-conflicts [--except name,name]
 ```
 
 `migrate audit` checks registered AuthMe names and writes a CSV under `plugins/AuthMePAL/migration/`; it does not change account state. `migrate apply --exempt-conflicts` exempts names classified as premium-name conflicts, optionally excluding the comma-separated names. Review the audit and keep a backup before applying changes. Actual migration of existing player UUID-keyed server data is not performed.

@@ -6,7 +6,7 @@ Project-specific agent instructions for **login-core** (Paper authentication plu
 
 - **Target/main server:** Paper **26.3** (Java 25). This is the production target. The **only local test server** is `C:\Tools\global-test-server-26.3` (Leaf 26.3-27, API `26.3.build.27-alpha`, Java 25, game port **25566**, offline/cracked, qcart-only player data, three restored loopback bridges); manage it with `TestServer.ps1` (see `../GLOBAL_TEST_SERVER.md`); use it for target testing. There is no local 1.21.11 server (retired 2026-11-23); older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
 - **Java:** 25 (toolchain). Emits Java 25 bytecode.
-- **Plugin name:** `authmePAL`. PacketEvents 2.14.0 (spigot) for handshake/session work.
+- **Plugin name:** `authmePAL` (runtime name); package `com.hizeric.logincore`; command `/logincore`. PacketEvents 2.14.0 (spigot) for handshake/session work.
 
 ## Build & run
 
@@ -19,7 +19,7 @@ Project-specific agent instructions for **login-core** (Paper authentication plu
 
 ## Architecture
 
-- Packages: `org.authmePAL.authme`, `command`, `decision`, `handshake`, `migration`, `mojang`, `session`, `storage`.
+- Packages: `com.hizeric.logincore.*` — `authme`, `command`, `decision`, `handshake`, `migration`, `mojang`, `session`, `storage`.
 - Handshake/session/storage are the core; migration handles legacy data.
 
 ## Critical gotchas
