@@ -27,7 +27,7 @@ class ClassificationImmutabilityTest {
 
             TestPlugin plugin = TestPlugin.create();
             AuthState state = new AuthState();
-            LoginCommand login = new LoginCommand(plugin, Runnable::run, storage, state);
+            LoginCommand login = new LoginCommand(plugin, Runnable::run, storage, state, player -> true);
             RegisterCommand register = new RegisterCommand(plugin, Runnable::run, storage, state);
             ChangepasswordCommand changepassword = new ChangepasswordCommand(plugin, Runnable::run, storage);
 
