@@ -1,0 +1,26 @@
+# 0008 — Runtime identity, licensing, and vendoring policy
+
+- **Status:** accepted (2026-11-26)
+
+## Context
+
+Three contradictions blocked progress:
+1. ADR 0002 kept runtime plugin name `AuthMe` for compat, but code ships `name: AuthMePAL`, `main: org.authmePAL.AuthMePAL`, `depend: [packetevents, AuthMe]`. Data folder and downstream `depend` semantics unresolved.
+2. CREDITS.md claims "no source code was copied" and "no copyleft obligation"; PLAN.md §13 forbids copying AuthMe source. The standalone requirement (spec §4/§16) implies vendoring AuthMe core source, which is GPL-3.0 (copyleft-compatible but requires attribution/headers/NOTICE).
+3. Feasibility judge: full 10-component fork is 25–40 sessions; thin vendor (~1–2k LOC) is viable.
+
+## Decision
+
+**Identity.** Keep runtime plugin name `AuthMe` (preserves `plugins/AuthMe` data folder, `AuthMeApi` singleton, downstream `depend: [AuthMe]`). Repository/artifact/group remain `login-core`/`com.hizeric.logincore`. Package own code `com.hizeric.logincore`; keep vendored `fr.xephi.*` packages intact for attribution and small diff. Update `plugin.yml` `name: AuthMe`, `main: com.hizeric.logincore.LoginCore`, `depend: [packetevents]` (drop AuthMe once vendored). Remove the `AuthMePAL` name from code/config.
+
+**Licensing.** login-core is GPL-3.0 (inherited from AuthMeReloaded). Vendoring GPL-3.0 source is permitted and requires: retaining upstream copyright headers and LICENSE, adding a NOTICE/PROVENANCE file recording upstream repo + exact commit SHA + modified files, updating CREDITS.md to acknowledge vendored source (remove "no source copied" claim). No relicensing.
+
+**Vendoring.** Thin vendor only: schema-compatible `authme` table, hash verify (BCrypt/Argon2), registration insert, authenticated-state tracking, events façade for downstream. ~1–2k LOC. Do not vendor the full AuthMe pipeline; login-core already owns handshake, Mojang client/cache/budget, decision engine, SQLite links. AuthMeBridge/AuthMeLoginListener remain the only AuthMe-touching files until vendoring lands, then are replaced.
+
+## Consequences
+
+- Data folder stays `plugins/AuthMe`; existing AuthMe SQLite data preserved (Phase 7 compat).
+- Downstream `depend: [AuthMe]` plugins keep working.
+- CREDITS.md and LICENSE must be updated before any vendored source is committed.
+- Vendoring scope capped; full fork deferred indefinitely.
+- ADR 0002 amended by this ADR (identity section superseded; compat section retained).
