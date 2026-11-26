@@ -5,6 +5,9 @@ import com.github.retrooper.packetevents.event.PacketListenerCommon;
 import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.authme.AuthMeLoginListener;
 import com.hizeric.logincore.command.AdminCommand;
+import com.hizeric.logincore.command.ChangepasswordCommand;
+import com.hizeric.logincore.command.LoginCommand;
+import com.hizeric.logincore.command.RegisterCommand;
 import com.hizeric.logincore.handshake.EncryptionKeys;
 import com.hizeric.logincore.handshake.LoginMetrics;
 import com.hizeric.logincore.handshake.PremiumLoginListener;
@@ -12,6 +15,7 @@ import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.mojang.LookupCache;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.mojang.RateBudget;
+import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.storage.Storage;
 import org.bukkit.plugin.Plugin;
@@ -111,6 +115,17 @@ public final class LoginCore extends JavaPlugin {
                 new AdminCommand(this, authMe, storage, mojang, migrationAudit, workers, loginMetrics);
             getCommand("logincore").setExecutor(adminCommand);
             getCommand("logincore").setTabCompleter(adminCommand);
+
+            AuthState authState = new AuthState();
+            LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState);
+            RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState);
+            ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage);
+            getCommand("login").setExecutor(loginCommand);
+            getCommand("login").setTabCompleter(loginCommand);
+            getCommand("register").setExecutor(registerCommand);
+            getCommand("register").setTabCompleter(registerCommand);
+            getCommand("changepassword").setExecutor(changepasswordCommand);
+            getCommand("changepassword").setTabCompleter(changepasswordCommand);
             getLogger().info("login-core login verification is active in " + getConfig().getString("mode") + " mode.");
         } catch (SQLException | IOException | java.security.GeneralSecurityException ex) {
             getLogger().severe("login-core could not initialize required storage or encryption: " + ex.getMessage());

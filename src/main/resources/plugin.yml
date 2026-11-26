@@ -12,6 +12,15 @@ commands:
   logincore:
     description: login-core administration
     usage: /logincore <status|exempt|migrate>
+  login:
+    description: Log in to an offline account
+    usage: /login <password>
+  register:
+    description: Register an offline account
+    usage: /register <password> <password>
+  changepassword:
+    description: Change your offline account password
+    usage: /changepassword <old> <new>
 permissions:
   logincore.admin:
     description: Allows administration of login-core
