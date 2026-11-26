@@ -135,24 +135,27 @@ Three independent judges (feasibility, security, build/compat) returned NO-GO. C
 - Defer locking/transaction soak.
 
 ## 18 classification test cases (enumerated)
-1. Valid premium session creates PREMIUM.
-2. Confirmed Mojang profile absence creates OFFLINE.
-3. Lookup timeout does not create OFFLINE.
-4. Session-server outage does not create OFFLINE.
-5. Invalid premium verification never authenticates.
-6. Cracked client cannot claim premium username.
-7. PREMIUM cannot become OFFLINE.
-8. OFFLINE cannot become PREMIUM.
-9. No public command changes identity type.
-10. No admin command changes identity type.
-11. No config option changes identity type.
-12. Failed persistence cannot grant unpersisted premium login.
-13. Simultaneous first logins cannot produce conflicting records.
-14. Expired verification cannot be reused.
-15. Disconnects clean up pending verification.
-16. Existing premium UUID records interpreted correctly.
-17. Legacy AuthMe accounts classified per migration strategy.
-18. Username conflicts do not cause silent account adoption.
+
+Status per the final review (2026-11-27): 7 covered, 7 partial, 4 uncovered.
+
+1. Valid premium session creates PREMIUM. — **Covered**
+2. Confirmed Mojang profile absence creates OFFLINE. — **Partial**
+3. Lookup timeout does not create OFFLINE. — **Partial**
+4. Session-server outage does not create OFFLINE. — **Uncovered**
+5. Invalid premium verification never authenticates. — **Partial**
+6. Cracked client cannot claim premium username. — **Partial**
+7. PREMIUM cannot become OFFLINE. — **Covered**
+8. OFFLINE cannot become PREMIUM. — **Covered**
+9. No public command changes identity type. — **Uncovered**
+10. No admin command changes identity type. — **Partial**
+11. No config option changes identity type. — **Uncovered**
+12. Failed persistence cannot grant unpersisted premium login. — **Covered**
+13. Simultaneous first logins cannot produce conflicting records. — **Partial**
+14. Expired verification cannot be reused. — **Partial**
+15. Disconnects clean up pending verification. — **Uncovered**
+16. Existing premium UUID records interpreted correctly. — **Covered**
+17. Legacy AuthMe accounts classified per migration strategy. — **Covered**
+18. Username conflicts do not cause silent account adoption. — **Covered**
 
 ## Thin vendor scope (not full fork)
 Only: schema-compatible authme table, hash verify (BCrypt/Argon2), registration insert, authenticated-state tracking, events façade for downstream. ~1–2k LOC. Keep Jalu out (nothing to remove). AuthMeBridge/AuthMeLoginListener remain the only AuthMe-touching files until vendoring lands.

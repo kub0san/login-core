@@ -356,7 +356,7 @@ Write each answer in `docs/SPIKE_RESULTS.md` with evidence (log lines, javadoc l
 | **M5 AuthMe integration + storage** | **Done — live verification pending** | `AuthMeBridge`, `Storage`, post-verify table (`LoginDecisionEngine:85-105`), `AuthMeLoginListener`, startup guard. All six "Done when" behaviours are implemented in code; none confirmed on a live server yet. |
 | **M6 Premium UUID mode** | **Done — live test pending** | Profile applied at `EventPriority.LOWEST` (`AuthMeLoginListener:51-61`) using `VerifiedSessions.playerUuid`. |
 | **M7 Migration tooling** | **Done** | `AdminCommand` + `MigrationAudit` (resumable CSV). Note: the audit **always resumes** the existing CSV rather than starting a fresh pass (defect F-06). |
-| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/logincore status` counters, README (incl. verification limits), example config, `CREDITS.md`. **Missing:** CI (no `.github/`); `LICENSE` not chosen yet. `LICENSE`+`NOTICE` "only if you reused FastLogin code" does not apply — no code was reused. |
+| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/logincore status` counters, README (incl. verification limits), example config, `CREDITS.md`, `LICENSE` (GPL-3.0) and `NOTICE` (provenance). **Missing:** CI (no `.github/`). The one vendored file is jBCrypt 0.4 (ISC), not AuthMe; see `NOTICE` for provenance and `CREDITS.md` for dependency versions and licences. |
 
 ---
 
@@ -481,12 +481,12 @@ Turn on `debug: true` before capturing logs. **Redact secrets.**
 
 ## 13. Licensing and credits
 
-> **Status: [DONE — see `CREDITS.md`.]** The provenance claim below was verified with a statement-level diff against upstream AuthMe and FastLogin sources: no code was copied. `CREDITS.md` records the design references, every dependency with its version and licence, and this analysis.
+> **Status: [DONE — see `CREDITS.md` and `NOTICE`.]** The claim below that no AuthMe or FastLogin code was copied still holds; the one vendored file is jBCrypt 0.4 (ISC), recorded in `NOTICE`. `CREDITS.md` records the design references, every dependency with its version and licence, and this analysis.
 
 - FastLogin (TuxCoding) is **MIT**: keep its copyright/permission notice only if code is copied or closely adapted. **No code was copied** — only the login-flow design.
 - AuthMeReloaded is **GPL-3.0**: depend on its API only (`compileOnly`); don't copy its source, including its PacketEvents premium handshake. Use it only as behavioural reference. **Honoured** — AuthMe types appear only in `AuthMeBridge` and `AuthMeLoginListener`, never vendored.
 - **PacketEvents is GPL-3.0** (previously assumed MIT here — corrected 21 Oct 2026). It is `compileOnly` and installed as a separate server plugin; nothing from it is bundled in the AuthMePAL jar.
-- AuthMePAL's own licence: **not yet chosen.**
+- AuthMePAL's own licence: **GPL-3.0**, inherited from AuthMeReloaded — see `LICENSE` and `NOTICE` for provenance.
 - Reference reading: AuthMe `docs/premium.md` (how their handshake is structured), PacketEvents docs (login wrappers: `WrapperLoginServerEncryptionRequest(serverId, publicKeyBytes, verifyToken, shouldAuthenticate)` etc. **[VERIFY]** the client-side wrapper names), Paper docs (project setup).
 
 ---
@@ -495,7 +495,7 @@ Turn on `debug: true` before capturing logs. **Redact secrets.**
 
 R1–R5 met; M0–M5, M7, M8 complete (M6 optional); security checklist fully ticked; manual matrix executed on Paper 26.2 with PacketEvents 2.13.0 and AuthMe 6.0.1; `docs/SPIKE_RESULTS.md` and `docs/DEVIATIONS.md` up to date.
 
-**Remaining to reach that bar:** M8 CI, a `LICENSE` choice, spike S1/S5/S6 + S7 live verification, the manual matrix, the `FakeClient` integration harness (§10), a live join test for premium-UUID propagation, and the "no proxy in v1" documentation gap (§11 item 12). Defects **K-1, K-2, K-3, F-01** should be resolved or explicitly accepted before release (§15).
+**Remaining to reach that bar:** M8 CI, spike S1/S5/S6 + S7 live verification, the manual matrix, the `FakeClient` integration harness (§10), a live join test for premium-UUID propagation, and the "no proxy in v1" documentation gap (§11 item 12). Defects **K-1, K-2, K-3, F-01** should be resolved or explicitly accepted before release (§15).
 
 ---
 
