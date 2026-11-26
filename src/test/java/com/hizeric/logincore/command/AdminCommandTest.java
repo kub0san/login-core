@@ -1,13 +1,20 @@
 package com.hizeric.logincore.command;
 
+import com.hizeric.logincore.TestPlugin;
+import com.hizeric.logincore.handshake.LoginMetrics;
+import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.storage.Storage;
 import org.bukkit.command.CommandSender;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,5 +80,82 @@ class AdminCommandTest {
             assertTrue(storage.classification("LEGACYGUY").get().isEmpty());
             assertEquals(0, storage.summary().get().classifications());
         }
+    }
+
+    @Test
+    void everySubcommandLeavesStoredClassificationUntouched() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("commands.db"))) {
+            storage.setClassification("BaselineGuy", "OFFLINE").get();
+            MigrationAudit audit = audit(storage, temporaryDirectory.resolve("data"));
+            ExecutorService workers = Executors.newSingleThreadExecutor();
+            try {
+                AdminCommand command = new AdminCommand(TestPlugin.create(), null, storage, null,
+                    audit, workers, new LoginMetrics());
+                CommandSender sender = sender();
+                for (String[] args : new String[][]{
+                    {"status"},
+                    {"exempt", "add", "ExemptGuy"},
+                    {"exempt", "list"},
+                    {"exempt", "remove", "ExemptGuy"},
+                    {"migrate", "audit"},
+                    {"migrate", "classify"}
+                }) {
+                    assertTrue(command.onCommand(sender, null, "logincore", args));
+                    assertEquals("OFFLINE", storage.classification("BaselineGuy").get().orElseThrow(),
+                        Arrays.toString(args));
+                    assertTrue(storage.classification("FreshGuy").get().isEmpty(), Arrays.toString(args));
+                }
+                assertEquals(1, storage.summary().get().classifications(),
+                    "no subcommand may add or change a classification row");
+            } finally {
+                workers.shutdownNow();
+                audit.close();
+            }
+        }
+    }
+
+    @Test
+    void migrateClassifyOnlyWritesPremiumForLinkedNames() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("classify.db"))) {
+            storage.putLink("LinkedGuy", UUID_TEXT, "LinkedGuy", "AUTO").get();
+            storage.setClassification("OfflineGuy", "OFFLINE").get();
+            storage.addExempt("ExemptGuy", "migration", "operator").get();
+            MigrationAudit audit = audit(storage, temporaryDirectory.resolve("data"));
+            ExecutorService workers = Executors.newSingleThreadExecutor();
+            try {
+                AdminCommand command = new AdminCommand(TestPlugin.create(), null, storage, null,
+                    audit, workers, new LoginMetrics());
+
+                assertTrue(command.onCommand(sender(), null, "logincore", new String[]{"migrate", "classify"}));
+
+                assertEquals("PREMIUM", storage.classification("LinkedGuy").get().orElseThrow());
+                assertEquals("OFFLINE", storage.classification("OfflineGuy").get().orElseThrow());
+                assertTrue(storage.classification("ExemptGuy").get().isEmpty(),
+                    "an unlinked exempt name stays unclassified");
+                assertTrue(storage.classification("FreshGuy").get().isEmpty());
+                assertEquals(2, storage.summary().get().classifications(), "migrate classify never writes OFFLINE");
+            } finally {
+                workers.shutdownNow();
+                audit.close();
+            }
+        }
+    }
+
+    private static MigrationAudit audit(Storage storage, Path dataFolder) throws Exception {
+        // The apply/audit seam needs only a data folder and storage; no AuthMe singleton.
+        Constructor<MigrationAudit> constructor =
+            MigrationAudit.class.getDeclaredConstructor(Path.class, Storage.class);
+        constructor.setAccessible(true);
+        return constructor.newInstance(dataFolder, storage);
+    }
+
+    private static CommandSender sender() {
+        return (CommandSender) Proxy.newProxyInstance(CommandSender.class.getClassLoader(),
+            new Class<?>[]{CommandSender.class},
+            (proxy, method, args) -> switch (method.getName()) {
+                case "hasPermission" -> Boolean.TRUE;
+                case "getName" -> "operator";
+                default -> null;
+            });
     }
 }
