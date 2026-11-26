@@ -6,13 +6,13 @@ Project-specific agent instructions for **login-core** (Paper authentication plu
 
 - **Target/main server:** Paper **26.3** (Java 25). This is the production target. The **only local test server** is `C:\Tools\global-test-server-26.3` (Leaf 26.3-27, API `26.3.build.27-alpha`, Java 25, game port **25566**, offline/cracked, qcart-only player data, three restored loopback bridges); manage it with `TestServer.ps1` (see `../GLOBAL_TEST_SERVER.md`); use it for target testing. There is no local 1.21.11 server (retired 2026-11-23); older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
 - **Java:** 25 (toolchain). Emits Java 25 bytecode.
-- **Plugin name:** `authmePAL`. PacketEvents 2.13.0 (spigot) for handshake/session work.
+- **Plugin name:** `authmePAL`. PacketEvents 2.14.0 (spigot) for handshake/session work.
 
 ## Build & run
 
 - Build: `./gradlew build`
 - Tests: `./gradlew test` (JUnit 5 present under src/test/java).
-- Run server: `./gradlew runServer` (currently pinned to `minecraftVersion("26.2")` in build.gradle.kts; bump to 26.3 to match the target before release).
+- Run server: `./gradlew runServer` (pinned to `minecraftVersion("26.3")` in build.gradle.kts, matching the target).
 - Compile only: `./gradlew compileJava`.
 - Test server (promoted path): from `C:\Tools\global-test-server-26.3`, run `.\TestServer.ps1 setup`, `deploy authmePAL` (build, copy jar to `plugins\`, full `restart` — never `plugman reload`), `status`, `verify`, `snapshot [name]`, `reset [name]` / `reset -Fresh`, `stop`; `-Help` prints the exact command table and MCP usage map. `restart` only proves log readiness; Craftwire `list_instances` → `server_info` + a real assertion is required before claiming a pass. Player data is qcart-only (UUID `befc5d95-fd63-4cae-b0f5-7c2fb271c699`, 4 files): non-`Fresh` `reset` preserves it; `reset -Fresh` intentionally does not. AuthMe / AuthMePAL are **not installed by default** on the test server (removed 2026-11-25): `deploy authmePAL` is supported but deliberate, and AuthMe must be restored alongside it (hard dependency) for the plugin to enable.
 - Shared test server and Minecraft MCP usage: `../GLOBAL_TEST_SERVER.md` (the old `run/` dir was removed; copy the built jar into the global server's `plugins/`). When `qcart` is testing in-game and you need to act on their chat messages, use the qcart chat bridge (launch daemon, watch `qcart-inbox.jsonl`) — procedure in `../GLOBAL_TEST_SERVER.md`.

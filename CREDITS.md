@@ -58,9 +58,9 @@ is compiled into, shaded into, or redistributed with the AuthMePAL jar.
 
 | Component | Version | Licence | How it is used |
 |---|---|---|---|
-| [PacketEvents](https://github.com/retrooper/packetevents) (`packetevents-spigot`) | 2.13.0 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL calls its login-phase packet listeners and wrappers. Not bundled. |
+| [PacketEvents](https://github.com/retrooper/packetevents) (`packetevents-spigot`) | 2.14.0 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL calls its login-phase packet listeners and wrappers. Not bundled. |
 | [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (`authme-core`) | 6.0.1 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL touches AuthMe types only through `AuthMeBridge`. Not bundled. |
-| [Paper API](https://papermc.io/) (`paper-api`) | 26.2 | See [PaperMC's licence](https://papermc.io/license) | Server API: plugin lifecycle, events, player profiles. |
+| [Paper API](https://papermc.io/) (`paper-api`) | 26.3 | See [PaperMC's licence](https://papermc.io/license) | Server API: plugin lifecycle, events, player profiles. |
 | Gson | provided by server | Apache-2.0 | JSON parsing for Mojang responses. |
 | Netty | provided by server | Apache-2.0 | Cipher handlers installed into the login channel pipeline. |
 

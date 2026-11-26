@@ -11,7 +11,7 @@
 - If an error occurs (such as a Gradle build failure), read only the relevant stack trace snippet rather than dumping whole configuration logs.
 
 ## 3. Environment Context
-- Target Platform: Minecraft Java Plugin development using **Paper API / Leaf v26.2**.
+- Target Platform: Minecraft Java Plugin development using **Paper API / Leaf v26.3**.
 - Keep all code lightweight, optimized for low-spec hosting servers, and compliant with modern Java standards. 
 
 ---
@@ -58,12 +58,12 @@ AuthMe 6 has a built-in PacketEvents premium bypass, but it is **opt-in** (`/pre
 
 | Component | Version / value | Notes |
 |---|---|---|
-| Server | **Paper 26.2** (offline mode: `online-mode=false`) | New version scheme (no `1.x`). Plugin API dependency `io.papermc.paper:paper-api:26.2.build.+`. |
+| Server | **Paper 26.3** (offline mode: `online-mode=false`) | New version scheme (no `1.x`). Plugin API dependency `io.papermc.paper:paper-api:26.3.build.200-stable`. |
 | Java | **25** | Toolchain 25 (Paper's project-setup docs require Java 25 for 26.x). |
 | Build | **Gradle, Kotlin DSL** (use the wrapper) | `run-paper` Gradle plugin for a local test server. |
-| PacketEvents | **2.13.0** (first release with 26.2 support, 22 Jun 2026) | **Installed as a server plugin, not shaded** (AuthMe also expects the PacketEvents plugin). `compileOnly` + `depend`. |
-| AuthMe | **6.0.1** (3 Sep 2026; lists 26.2 support) | Paper jar vs Spigot-1.21 jar: **[VERIFY]** which one the server should run on Paper 26.2 (AuthMe README says Paper jar for Paper 1.21+). |
-| Plugin descriptor | `plugin.yml` | Paper's own docs flag `paper-plugin.yml` as experimental. `api-version: '26.2'`, `depend: [packetevents, AuthMe]`, plugin name `AuthMePAL`, author `hizeric`. |
+| PacketEvents | **2.14.0** (supports Paper 26.3) | **Installed as a server plugin, not shaded** (AuthMe also expects the PacketEvents plugin). `compileOnly` + `depend`. |
+| AuthMe | **6.0.1** (3 Sep 2026; lists 26.2 support) | Paper jar vs Spigot-1.21 jar: **[VERIFY]** which one the server should run on Paper 26.3 (AuthMe README says Paper jar for Paper 1.21+). |
+| Plugin descriptor | `plugin.yml` | Paper's own docs flag `paper-plugin.yml` as experimental. `api-version: '26.3'`, `depend: [packetevents, AuthMe]`, plugin name `AuthMePAL`, author `hizeric`. |
 | JSON | Gson | Provided by the server; don't shade. |
 | Storage | SQLite (single file) | **[RESOLVED]** the driver does not ship with Paper; `plugin.yml` declares it under `libraries:` (`plugin.yml:8-10`). |
 | HTTP | JDK `java.net.http.HttpClient` | Connect timeout 3 s, request timeout 5 s. |
@@ -83,8 +83,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.200-stable")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.14.0")
     compileOnly("fr.xephi:authme-core:6.0.1")                     // [VERIFY] artifact + AuthMeApi package (api.v3?)
     testImplementation(platform("org.junit:junit-bom:<latest 5.x>"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -93,7 +93,7 @@ dependencies {
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)) }
 
 tasks.runServer {
-    minecraftVersion("26.2")
+    minecraftVersion("26.3")
     // download PacketEvents + AuthMe into the run dir; write online-mode=false  [VERIFY run-paper syntax]
 }
 ```

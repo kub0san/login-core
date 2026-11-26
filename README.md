@@ -25,8 +25,8 @@ login-core securely verifies Mojang account ownership on offline-mode Paper serv
 
 ## Requirements
 
-- Paper 26.2 and Java 25
-- PacketEvents 2.13.0 installed as a server plugin
+- Paper 26.3 and Java 25
+- PacketEvents 2.14.0 installed as a server plugin
 - AuthMeReloaded 6.0.1 installed as a server plugin
 - `online-mode=false` in `server.properties`
 - AuthMe `settings.enablePremium: false` (AuthMePAL will disable itself if AuthMe's premium handshake is enabled)
