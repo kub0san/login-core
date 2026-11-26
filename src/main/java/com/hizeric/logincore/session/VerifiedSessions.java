@@ -19,10 +19,19 @@ public final class VerifiedSessions {
     private final Map<String, Entry> byConnection = new ConcurrentHashMap<>();
     private final Map<String, String> connectionByNameAndIp = new ConcurrentHashMap<>();
 
-    public void put(VerifiedSession session) {
+    public boolean put(VerifiedSession session) {
+        String sessionKey = key(session.name(), session.remoteIp());
+        String existing = connectionByNameAndIp.get(sessionKey);
+        if (existing != null) {
+            Entry live = byConnection.get(existing);
+            if (live != null && !live.expiresAt().isBefore(Instant.now())) {
+                return false;
+            }
+        }
         Entry entry = new Entry(session, Instant.now().plus(TTL));
         byConnection.put(session.connectionId(), entry);
-        connectionByNameAndIp.put(key(session.name(), session.remoteIp()), session.connectionId());
+        connectionByNameAndIp.put(sessionKey, session.connectionId());
+        return true;
     }
 
     public Optional<VerifiedSession> find(String name, InetSocketAddress remoteAddress) {
@@ -59,6 +68,15 @@ public final class VerifiedSessions {
         return Optional.of(entry.session());
     }
 
+    public boolean hasLiveAlias(String name, String remoteIp) {
+        String connectionId = connectionByNameAndIp.get(key(name, remoteIp));
+        if (connectionId == null) {
+            return false;
+        }
+        Entry entry = byConnection.get(connectionId);
+        return entry != null && !entry.expiresAt().isBefore(Instant.now());
+    }
+
     public Optional<VerifiedSession> consume(String name, InetSocketAddress remoteAddress) {
         if (remoteAddress == null) {
             return Optional.empty();
@@ -92,6 +110,10 @@ public final class VerifiedSessions {
         return byConnection.size();
     }
 
+    public int pendingCount() {
+        return size();
+    }
+
     private void purgeExpired() {
         Instant now = Instant.now();
         byConnection.forEach((connectionId, entry) -> {
@@ -101,6 +123,7 @@ public final class VerifiedSessions {
         });
     }
 
+    // shortcut: name@ip cannot distinguish two simultaneous connections from the same IP; fail closed instead. Upgrade to a channel-keyed handoff if Bukkit ever exposes one.
     private static String key(String name, String remoteIp) {
         return name.toLowerCase(Locale.ROOT) + "@" + remoteIp;
     }

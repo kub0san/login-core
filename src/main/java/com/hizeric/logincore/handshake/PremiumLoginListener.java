@@ -317,13 +317,18 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         boolean autoLogin = !requirePasswordOnce;
         String source = shouldRegister || action == LoginDecisionEngine.PostVerifyAction.LINK_AND_AUTO_LOGIN
             ? "AUTO" : "PASSWORD_ONCE";
+        if (!verifiedSessions.put(new VerifiedSession(attempt.connectionId, attempt.name, attempt.remoteIp, result,
+            attempt.link, attempt.registeredBeforeLogin, shouldRegister, requirePasswordOnce, autoLogin, source))) {
+            plugin.getLogger().warning("Refused a second verified session for " + attempt.name + " from "
+                + attempt.remoteIp + "; a live session already exists.");
+            disconnect(attempt, "throttled");
+            return;
+        }
         attempt.phase = LoginFlowState.REINJECTED;
         metrics.verified();
         if (attempt.timeout != null) {
             attempt.timeout.cancel(false);
         }
-        verifiedSessions.put(new VerifiedSession(attempt.connectionId, attempt.name, attempt.remoteIp, result,
-            attempt.link, attempt.registeredBeforeLogin, shouldRegister, requirePasswordOnce, autoLogin, source));
         attempt.expiry = attempt.channel.eventLoop().schedule(
             () -> release(attempt.connectionId, true), 60, TimeUnit.SECONDS);
         attempt.user.receivePacketSilently(new WrapperLoginClientLoginStart(
