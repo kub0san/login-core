@@ -26,9 +26,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MigrationAudit implements AutoCloseable {
 
+    public record ExemptionReport(int added, int skippedPremium) {
+    }
+
     private static final String HEADER = "name,status,mojang_uuid,last_login,last_ip,registered_at";
 
     private final JavaPlugin plugin;
+    private final Path dataFolder;
     private final AuthMeBridge authMe;
     private final Storage storage;
     private final MojangClient mojang;
@@ -41,9 +45,19 @@ public final class MigrationAudit implements AutoCloseable {
 
     public MigrationAudit(JavaPlugin plugin, AuthMeBridge authMe, Storage storage, MojangClient mojang) {
         this.plugin = plugin;
+        this.dataFolder = plugin.getDataFolder().toPath();
         this.authMe = authMe;
         this.storage = storage;
         this.mojang = mojang;
+    }
+
+    /** The apply path only needs the audit directory and storage; no plugin or authme singleton. */
+    MigrationAudit(Path dataFolder, Storage storage) {
+        this.plugin = null;
+        this.dataFolder = dataFolder;
+        this.authMe = null;
+        this.storage = storage;
+        this.mojang = null;
     }
 
     public CompletableFuture<Path> startAudit() {
@@ -64,7 +78,7 @@ public final class MigrationAudit implements AutoCloseable {
         }, executor);
     }
 
-    public CompletableFuture<Integer> applyPremiumNameExemptions(Set<String> exceptNames, String addedBy) {
+    public CompletableFuture<ExemptionReport> applyPremiumNameExemptions(Set<String> exceptNames, String addedBy) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 Path audit = latestAudit();
@@ -72,6 +86,7 @@ public final class MigrationAudit implements AutoCloseable {
                     throw new IllegalStateException("No migration audit exists. Run /logincore migrate audit first.");
                 }
                 int added = 0;
+                int skippedPremium = 0;
                 for (String line : Files.readAllLines(audit, StandardCharsets.UTF_8).stream().skip(1).toList()) {
                     String[] columns = parseCsvLine(line);
                     if (columns.length < 2 || !"PREMIUM_NAME".equals(columns[1])) {
@@ -81,10 +96,15 @@ public final class MigrationAudit implements AutoCloseable {
                     if (exceptNames.contains(normalizedName)) {
                         continue;
                     }
+                    // An exemption must never neutralize an authoritative PREMIUM classification.
+                    if ("PREMIUM".equals(storage.classification(normalizedName).join().orElse(null))) {
+                        skippedPremium++;
+                        continue;
+                    }
                     storage.addExempt(columns[0], "Migration audit premium-name conflict", addedBy).join();
                     added++;
                 }
-                return added;
+                return new ExemptionReport(added, skippedPremium);
             } catch (IOException ex) {
                 throw new CompletionException(ex);
             }
@@ -92,7 +112,7 @@ public final class MigrationAudit implements AutoCloseable {
     }
 
     private Path runAudit() throws IOException, InterruptedException {
-        Path directory = plugin.getDataFolder().toPath().resolve("migration");
+        Path directory = dataFolder.resolve("migration");
         Files.createDirectories(directory);
         Path audit = latestAudit();
         if (audit == null) {
@@ -136,7 +156,7 @@ public final class MigrationAudit implements AutoCloseable {
     }
 
     private Path latestAudit() throws IOException {
-        Path directory = plugin.getDataFolder().toPath().resolve("migration");
+        Path directory = dataFolder.resolve("migration");
         Path current = directory.resolve("current-audit.txt");
         if (!Files.isRegularFile(current)) {
             return null;
@@ -200,7 +220,7 @@ public final class MigrationAudit implements AutoCloseable {
     public void close() {
         executor.shutdownNow();
         try {
-            if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!executor.awaitTermination(5, TimeUnit.SECONDS) && plugin != null) {
                 plugin.getLogger().warning("Migration audit worker did not stop promptly.");
             }
         } catch (InterruptedException ex) {

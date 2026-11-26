@@ -55,7 +55,6 @@ The generated config controls Mojang lookup endpoints, lookup-failure behavior, 
 `existing-account-policy` controls a verified premium owner whose username is already registered in AuthMe but has no AuthMePAL link:
 
 - `REQUIRE_PASSWORD_ONCE` (default): the owner must complete AuthMe password login once; AuthMePAL saves the link after successful login.
-- `ADOPT`: link and auto-login the verified premium identity. Use only after reviewing existing accounts and migration results.
 - `DENY`: reject the verified premium login until an administrator resolves the account.
 
 Newly encountered premium identities are registered with AuthMe and auto-logged-in using an automatically generated password the player does not know. If Mojang verification is unavailable they cannot use a password fallback; administrators must use AuthMe's supported password-reset process if recovery is needed.

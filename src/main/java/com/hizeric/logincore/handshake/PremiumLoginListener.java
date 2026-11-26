@@ -147,7 +147,8 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         if (!isCurrent(attempt)) {
             return;
         }
-        if (context.account().exempt()) {
+        // Exempt stays subordinate to an authoritative PREMIUM classification.
+        if (context.account().exempt() && !"PREMIUM".equals(context.storedClassification)) {
             reinjectOriginal(attempt);
             return;
         }

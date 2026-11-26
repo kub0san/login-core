@@ -51,6 +51,28 @@ class LoginDecisionEngineTest {
     }
 
     @Test
+    void premiumClassifiedNameIsNeverExempt() {
+        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
+            "Notch",
+            true,
+            true,
+            LookupResult.notPremium(),
+            false,
+            null,
+            null,
+            false,
+            false,
+            false,
+            "PREMIUM"
+        );
+
+        LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
+
+        assertEquals(LoginDecisionEngine.Decision.HANDSHAKE_REQUIRED, decision);
+        assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, input.lookupResult(), input.hasLink()));
+    }
+
+    @Test
     void blocksPremiumNameWithMismatchedClientUuidHint() {
         UUID premiumUuid = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1");
         UUID hintedUuid = UUID.fromString("11111111-1111-1111-1111-111111111111");
@@ -102,7 +124,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                LoginDecisionEngine.ExistingAccountPolicy.ADOPT
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
             )
         );
     }
@@ -149,7 +171,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                LoginDecisionEngine.ExistingAccountPolicy.ADOPT
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
             )
         );
     }
@@ -169,17 +191,7 @@ class LoginDecisionEngineTest {
     }
 
     @Test
-    void adoptsExistingAccountsOnlyWhenConfigured() {
-        assertEquals(
-            LoginDecisionEngine.PostVerifyAction.LINK_AND_AUTO_LOGIN,
-            LoginDecisionEngine.decidePostVerify(
-                true,
-                UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
-                true,
-                null,
-                LoginDecisionEngine.ExistingAccountPolicy.ADOPT
-            )
-        );
+    void denyPolicyStillRejectsUnverifiedExistingAccounts() {
         assertEquals(
             LoginDecisionEngine.PostVerifyAction.DENY,
             LoginDecisionEngine.decidePostVerify(
@@ -216,7 +228,7 @@ class LoginDecisionEngineTest {
                 null,
                 false,
                 null,
-                LoginDecisionEngine.ExistingAccountPolicy.ADOPT
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
             )
         );
     }

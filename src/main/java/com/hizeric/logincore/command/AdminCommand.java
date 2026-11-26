@@ -243,11 +243,13 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             migrationAudit.applyPremiumNameExemptions(exceptNames, sender.getName())
-                .whenComplete((count, error) -> onMain(sender, () -> {
+                .whenComplete((report, error) -> onMain(sender, () -> {
                     if (error != null) {
                         reportError(sender, error);
                     } else {
-                        sender.sendMessage(ChatColor.GREEN + "Added " + count + " migration exemptions.");
+                        sender.sendMessage(ChatColor.GREEN + "Added " + report.added()
+                            + " migration exemptions; skipped " + report.skippedPremium()
+                            + " premium-classified name(s).");
                     }
                 }));
             return;

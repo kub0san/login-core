@@ -26,7 +26,6 @@ public final class LoginDecisionEngine {
 
     public enum ExistingAccountPolicy {
         REQUIRE_PASSWORD_ONCE,
-        ADOPT,
         DENY
     }
 
@@ -56,7 +55,8 @@ public final class LoginDecisionEngine {
         if (!input.validName()) {
             return Decision.PASS_THROUGH;
         }
-        if (input.exempt()) {
+        // An exemption never overrides an authoritative PREMIUM classification.
+        if (input.exempt() && !"PREMIUM".equals(input.storedClassification())) {
             return Decision.PASS_THROUGH;
         }
         // OFFLINE cannot become PREMIUM, even if a handshake somehow succeeded.
@@ -123,7 +123,6 @@ public final class LoginDecisionEngine {
         }
         return switch (policy) {
             case REQUIRE_PASSWORD_ONCE -> PostVerifyAction.REQUIRE_PASSWORD_ONCE;
-            case ADOPT -> PostVerifyAction.LINK_AND_AUTO_LOGIN;
             case DENY -> PostVerifyAction.DENY;
         };
     }

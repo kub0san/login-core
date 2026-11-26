@@ -155,9 +155,7 @@ public final class LoginCore extends JavaPlugin {
             return false;
         }
         String policy = getConfig().getString("existing-account-policy", "REQUIRE_PASSWORD_ONCE");
-        if (!"REQUIRE_PASSWORD_ONCE".equalsIgnoreCase(policy)
-            && !"ADOPT".equalsIgnoreCase(policy)
-            && !"DENY".equalsIgnoreCase(policy)) {
+        if (!validExistingAccountPolicy(policy)) {
             getLogger().severe("Invalid existing-account-policy value '" + policy + "'.");
             return false;
         }
@@ -173,6 +171,10 @@ public final class LoginCore extends JavaPlugin {
             return false;
         }
         return true;
+    }
+
+    static boolean validExistingAccountPolicy(String policy) {
+        return "REQUIRE_PASSWORD_ONCE".equalsIgnoreCase(policy) || "DENY".equalsIgnoreCase(policy);
     }
 
 }

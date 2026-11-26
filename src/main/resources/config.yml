@@ -1,5 +1,6 @@
 mode: ENFORCE
 on-lookup-failure: DENY
+# Existing-account policy: REQUIRE_PASSWORD_ONCE | DENY
 existing-account-policy: REQUIRE_PASSWORD_ONCE
 handshake-timeout-seconds: 10
 # Verified premium players use their Mojang UUID instead of their offline UUID.
