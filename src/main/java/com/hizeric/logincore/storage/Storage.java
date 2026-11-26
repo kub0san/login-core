@@ -64,17 +64,20 @@ public final class Storage implements AutoCloseable {
                 boolean autoCommit = connection.getAutoCommit();
                 connection.setAutoCommit(false);
                 try {
-                    boolean hasClassification = false;
+                    // links.mojang_uuid is NOT NULL, so OFFLINE accounts cannot live in links.
+                    // Retire the old column (and its trigger) in favour of account_classification.
+                    statement.executeUpdate("DROP TRIGGER IF EXISTS links_classification_immutable");
+                    boolean hasLegacyClassification = false;
                     try (ResultSet result = statement.executeQuery("PRAGMA table_info(links)")) {
                         while (result.next()) {
                             if ("classification".equals(result.getString("name"))) {
-                                hasClassification = true;
+                                hasLegacyClassification = true;
                                 break;
                             }
                         }
                     }
-                    if (!hasClassification) {
-                        statement.executeUpdate("ALTER TABLE links ADD COLUMN classification TEXT");
+                    if (hasLegacyClassification) {
+                        statement.executeUpdate("ALTER TABLE links DROP COLUMN classification");
                     }
 
                     try {
@@ -94,13 +97,17 @@ public final class Storage implements AutoCloseable {
                             + ". Resolve them before starting login-core", ex);
                     }
 
-                    // IF NOT EXISTS cannot replace the old trigger body, so drop it first.
-                    statement.executeUpdate("DROP TRIGGER IF EXISTS links_classification_immutable");
                     statement.executeUpdate("""
-                        CREATE TRIGGER IF NOT EXISTS links_classification_immutable
-                        BEFORE UPDATE ON links
-                        WHEN OLD.classification IS NOT NULL
-                          AND (NEW.classification IS NULL OR OLD.classification <> NEW.classification)
+                        CREATE TABLE IF NOT EXISTS account_classification (
+                            name_lower TEXT PRIMARY KEY,
+                            classification TEXT NOT NULL CHECK (classification IN ('PREMIUM','OFFLINE')),
+                            set_at INTEGER NOT NULL
+                        )
+                        """);
+                    statement.executeUpdate("""
+                        CREATE TRIGGER IF NOT EXISTS account_classification_immutable
+                        BEFORE UPDATE ON account_classification
+                        WHEN OLD.classification <> NEW.classification
                         BEGIN
                             SELECT RAISE(ABORT, 'classification is immutable');
                         END
@@ -144,6 +151,39 @@ public final class Storage implements AutoCloseable {
 
     public CompletableFuture<Optional<Link>> link(String name) {
         return submit(() -> findLink(normalize(name)));
+    }
+
+    public CompletableFuture<ClassificationResult> setClassification(String name, String classification) {
+        String normalizedName = classificationKey(name);
+        String normalizedClassification = classification == null ? "" : classification.trim().toUpperCase(Locale.ROOT);
+        if (!"PREMIUM".equals(normalizedClassification) && !"OFFLINE".equals(normalizedClassification)) {
+            throw new IllegalArgumentException("Unsupported classification: " + classification);
+        }
+        return submit(() -> {
+            int inserted;
+            try (PreparedStatement statement = connection.prepareStatement("""
+                INSERT INTO account_classification (name_lower, classification, set_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(name_lower) DO NOTHING
+                """)) {
+                statement.setString(1, normalizedName);
+                statement.setString(2, normalizedClassification);
+                statement.setLong(3, Instant.now().toEpochMilli());
+                inserted = statement.executeUpdate();
+            }
+            if (inserted > 0) {
+                return ClassificationResult.SET;
+            }
+            String stored = storedClassification(normalizedName);
+            return normalizedClassification.equals(stored)
+                ? ClassificationResult.ALREADY_SAME
+                : ClassificationResult.ALREADY_DIFFERENT;
+        });
+    }
+
+    public CompletableFuture<Optional<String>> classification(String name) {
+        String normalizedName = classificationKey(name);
+        return submit(() -> Optional.ofNullable(storedClassification(normalizedName)));
     }
 
     public CompletableFuture<Void> putLink(String name, String mojangUuid, String canonicalName, String source) {
@@ -218,16 +258,26 @@ public final class Storage implements AutoCloseable {
     }
 
     public CompletableFuture<Summary> summary() {
-        return submit(() -> new Summary(countRows("links"), countRows("exempt")));
+        return submit(() -> new Summary(countRows("links"), countRows("exempt"), countRows("account_classification")));
     }
 
     private int countRows(String table) throws SQLException {
-        if (!"links".equals(table) && !"exempt".equals(table)) {
+        if (!"links".equals(table) && !"exempt".equals(table) && !"account_classification".equals(table)) {
             throw new IllegalArgumentException("Unsupported table name");
         }
         try (Statement statement = connection.createStatement();
              ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return result.next() ? result.getInt(1) : 0;
+        }
+    }
+
+    private String storedClassification(String normalizedName) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT classification FROM account_classification WHERE name_lower = ?")) {
+            statement.setString(1, normalizedName);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getString(1) : null;
+            }
         }
     }
 
@@ -262,6 +312,10 @@ public final class Storage implements AutoCloseable {
         return name.toLowerCase(Locale.ROOT);
     }
 
+    private static String classificationKey(String name) {
+        return normalize(name).trim();
+    }
+
     @Override
     public void close() {
         executor.shutdown();
@@ -293,6 +347,8 @@ public final class Storage implements AutoCloseable {
     public record AccountState(Optional<Link> link, boolean exempt) {
     }
 
-    public record Summary(int links, int exemptNames) {
+    public record Summary(int links, int exemptNames, int classifications) {
     }
+
+    public enum ClassificationResult { SET, ALREADY_SAME, ALREADY_DIFFERENT }
 }

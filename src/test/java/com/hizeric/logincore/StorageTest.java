@@ -14,7 +14,6 @@ import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,72 +47,107 @@ class StorageTest {
     }
 
     @Test
-    void classificationColumnIsAddedIdempotently() throws Exception {
-        Path database = temporaryDirectory.resolve("idempotent.db");
+    void classificationIsWrittenOnce() throws Exception {
+        Path database = temporaryDirectory.resolve("write-once.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertEquals(Storage.ClassificationResult.SET,
+                storage.setClassification("Notch", "OFFLINE").get());
+            assertEquals(Storage.ClassificationResult.ALREADY_DIFFERENT,
+                storage.setClassification("notch", "PREMIUM").get());
+            assertEquals("OFFLINE", classification(connection, "notch"));
+        }
+    }
 
+    @Test
+    void settingTheSameClassificationIsIdempotent() throws Exception {
+        Path database = temporaryDirectory.resolve("idempotent.db");
+        try (Storage storage = new Storage(database)) {
+            assertEquals(Storage.ClassificationResult.SET,
+                storage.setClassification(" Notch ", "premium").get());
+            assertEquals(Storage.ClassificationResult.ALREADY_SAME,
+                storage.setClassification("notch", "PREMIUM").get());
+            assertEquals("PREMIUM", storage.classification("NOTCH").get().orElseThrow());
+        }
+    }
+
+    @Test
+    void classificationSurvivesWithoutALinkRow() throws Exception {
+        Path database = temporaryDirectory.resolve("no-link.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertEquals(Storage.ClassificationResult.SET,
+                storage.setClassification("OfflineGuy", "OFFLINE").get());
+            assertTrue(storage.link("OfflineGuy").get().isEmpty());
+            assertEquals("OFFLINE", classification(connection, "offlineguy"));
+            assertEquals("OFFLINE", storage.classification("OFFLINEGUY").get().orElseThrow());
+            assertEquals(1, storage.summary().get().classifications());
+        }
+    }
+
+    @Test
+    void invalidClassificationValueIsRejected() throws Exception {
+        Path database = temporaryDirectory.resolve("invalid.db");
+        try (Storage storage = new Storage(database)) {
+            assertEquals(Storage.ClassificationResult.SET,
+                storage.setClassification("Notch", "premium").get());
+            assertThrows(IllegalArgumentException.class, () -> storage.setClassification("Notch", "MAYBE"));
+            assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
+        }
+    }
+
+    @Test
+    void linksClassificationColumnIsGone() throws Exception {
+        Path database = temporaryDirectory.resolve("schema.db");
         try (Storage first = new Storage(database)) {
-            assertTrue(hasClassificationColumn(database));
+            assertFalse(hasColumn(database, "links", "classification"));
+            assertTrue(hasColumn(database, "account_classification", "classification"));
         }
         try (Storage second = new Storage(database)) {
-            assertTrue(hasClassificationColumn(database));
+            assertFalse(hasColumn(database, "links", "classification"));
+            assertTrue(hasColumn(database, "account_classification", "classification"));
         }
     }
 
     @Test
-    void classificationCanBeSetOnceFromLegacyNull() throws Exception {
+    void legacyLinksClassificationIsMigrated() throws Exception {
         Path database = temporaryDirectory.resolve("legacy.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("Legacy", UUID, "Legacy", "AUTO").get();
+        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                CREATE TABLE links (
+                    name_lower TEXT PRIMARY KEY,
+                    mojang_uuid TEXT NOT NULL,
+                    canonical_name TEXT,
+                    linked_at INTEGER NOT NULL,
+                    last_verified_at INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    classification TEXT
+                )
+                """);
+            statement.executeUpdate("""
+                CREATE TRIGGER links_classification_immutable
+                BEFORE UPDATE ON links
+                WHEN OLD.classification IS NOT NULL
+                  AND (NEW.classification IS NULL OR OLD.classification <> NEW.classification)
+                BEGIN
+                    SELECT RAISE(ABORT, 'classification is immutable');
+                END
+                """);
         }
 
-        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
-            assertNull(classification(connection, "legacy"));
-            statement.executeUpdate("UPDATE links SET classification = 'OFFLINE' WHERE name_lower = 'legacy'");
-            assertEquals("OFFLINE", classification(connection, "legacy"));
+        try (Storage storage = new Storage(database)) {
+            assertFalse(hasColumn(database, "links", "classification"));
+            assertTrue(hasColumn(database, "account_classification", "classification"));
         }
     }
 
     @Test
-    void classificationCannotBeChanged() throws Exception {
+    void storedClassificationCannotBeChangedDirectly() throws Exception {
         Path database = temporaryDirectory.resolve("immutable.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("Notch", UUID, "Notch", "AUTO").get();
-        }
-
-        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("UPDATE links SET classification = 'PREMIUM' WHERE name_lower = 'notch'");
-            assertThrows(SQLException.class, () ->
-                statement.executeUpdate("UPDATE links SET classification = 'OFFLINE' WHERE name_lower = 'notch'"));
-            assertEquals("PREMIUM", classification(connection, "notch"));
-        }
-    }
-
-    @Test
-    void classificationCannotBeCleared() throws Exception {
-        Path database = temporaryDirectory.resolve("clear.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("Notch", UUID, "Notch", "AUTO").get();
-        }
-
-        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
-            statement.executeUpdate("UPDATE links SET classification = 'PREMIUM' WHERE name_lower = 'notch'");
-            assertThrows(SQLException.class, () ->
-                statement.executeUpdate("UPDATE links SET classification = NULL WHERE name_lower = 'notch'"));
-            assertEquals("PREMIUM", classification(connection, "notch"));
-        }
-    }
-
-    @Test
-    void reverificationDoesNotTouchClassification() throws Exception {
-        Path database = temporaryDirectory.resolve("reverify.db");
         try (Storage storage = new Storage(database);
              Connection connection = open(database);
              Statement statement = connection.createStatement()) {
-            storage.putLink("Notch", UUID, "Notch", "AUTO").get();
-            statement.executeUpdate("UPDATE links SET classification = 'PREMIUM' WHERE name_lower = 'notch'");
-
-            storage.putLink("Notch", UUID, "Notch", "AUTO").get();
-
+            storage.setClassification("Notch", "PREMIUM").get();
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                "UPDATE account_classification SET classification = 'OFFLINE' WHERE name_lower = 'notch'"));
             assertEquals("PREMIUM", classification(connection, "notch"));
         }
     }
@@ -158,12 +192,12 @@ class StorageTest {
         return DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath());
     }
 
-    private static boolean hasClassificationColumn(Path database) throws Exception {
+    private static boolean hasColumn(Path database, String table, String column) throws Exception {
         try (Connection connection = open(database);
              Statement statement = connection.createStatement();
-             ResultSet result = statement.executeQuery("PRAGMA table_info(links)")) {
+             ResultSet result = statement.executeQuery("PRAGMA table_info(" + table + ")")) {
             while (result.next()) {
-                if ("classification".equals(result.getString("name"))) {
+                if (column.equals(result.getString("name"))) {
                     return true;
                 }
             }
@@ -171,10 +205,10 @@ class StorageTest {
         return false;
     }
 
-    private static String classification(Connection connection, String name) throws SQLException {
+    private static String classification(Connection connection, String normalizedName) throws SQLException {
         try (PreparedStatement statement = connection.prepareStatement(
-            "SELECT classification FROM links WHERE name_lower = ?")) {
-            statement.setString(1, name);
+            "SELECT classification FROM account_classification WHERE name_lower = ?")) {
+            statement.setString(1, normalizedName);
             try (ResultSet result = statement.executeQuery()) {
                 return result.next() ? result.getString(1) : null;
             }
