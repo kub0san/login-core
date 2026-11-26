@@ -1,6 +1,6 @@
-# AuthMePAL
+# login-core
 
-AuthMePAL securely verifies Mojang account ownership on offline-mode Paper servers and connects verified players to AuthMe without a password prompt. Cracked-name collisions are blocked, while other cracked accounts continue through the normal AuthMe flow.
+login-core securely verifies Mojang account ownership on offline-mode Paper servers and connects verified players to AuthMe without a password prompt. Cracked-name collisions are blocked, while other cracked accounts continue through the normal AuthMe flow.
 
 **Author:** hizeric
 

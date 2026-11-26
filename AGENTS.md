@@ -1,6 +1,6 @@
 ﻿# AGENTS.md
 
-Project-specific agent instructions for **authmePAL** (Paper authentication plugin, Java).
+Project-specific agent instructions for **login-core** (Paper authentication plugin, Java).
 
 ## Platform
 

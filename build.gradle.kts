@@ -2,6 +2,7 @@ import java.nio.charset.StandardCharsets
 
 plugins {
     id("java-library")
+    id("com.gradleup.shadow") version "9.6.1"
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
 
@@ -13,7 +14,7 @@ repositories {
 }
 
 base {
-    archivesName.set("AuthMePAL")
+    archivesName.set("login-core")
 }
 
 dependencies {
@@ -38,6 +39,16 @@ tasks {
     withType<JavaCompile> {
         options.encoding = "UTF-8"
     }
+
+    // Plain jar writes the same filename and would clobber the shaded jar.
+    named<Jar>("jar") { enabled = false }
+
+    shadowJar {
+        archiveClassifier.set("")
+        // do not relocate org.sqlite — JNI loads by class name
+    }
+
+    named("build") { dependsOn("shadowJar") }
 
     // Guard against silent source corruption. Windows PowerShell 5.1 writes files as
     // ASCII by default, which turns characters like the section sign into '?' and
