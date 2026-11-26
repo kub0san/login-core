@@ -69,8 +69,6 @@ All commands require `logincore.admin` (default: operators). The command is `/lo
 /logincore exempt add <name>
 /logincore exempt remove <name>
 /logincore exempt list
-/logincore link <name> <uuid|auto>
-/logincore unlink <name>
 /logincore migrate audit
 /logincore migrate apply --exempt-conflicts [--except name,name]
 ```

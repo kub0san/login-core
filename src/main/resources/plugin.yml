@@ -11,7 +11,7 @@ libraries:
 commands:
   logincore:
     description: login-core administration
-    usage: /logincore <status|exempt|link|unlink|migrate>
+    usage: /logincore <status|exempt|migrate>
 permissions:
   logincore.admin:
     description: Allows administration of login-core

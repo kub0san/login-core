@@ -180,6 +180,7 @@ public final class Storage implements AutoCloseable {
         return submit(() -> Optional.ofNullable(storedClassification(normalizedName)));
     }
 
+    // Internal-only (login pipeline); never wire this to a command — classification is immutable.
     public CompletableFuture<Void> putLink(String name, String mojangUuid, String canonicalName, String source) {
         String normalized = normalize(name);
         return submit(() -> {
@@ -221,6 +222,7 @@ public final class Storage implements AutoCloseable {
         });
     }
 
+    // Internal-only (login pipeline); never wire this to a command — classification is immutable.
     public CompletableFuture<Boolean> unlink(String name) {
         return submit(() -> {
             try (PreparedStatement statement = connection.prepareStatement("DELETE FROM links WHERE name_lower = ?")) {
