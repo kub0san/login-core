@@ -164,7 +164,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             attempt.uuidHint,
             false,
             isShadowMode(),
-            getConfigBoolean("on-lookup-failure", "ALLOW").equalsIgnoreCase("ALLOW")
+            getConfigBoolean("on-lookup-failure", "DENY").equalsIgnoreCase("ALLOW")
         );
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
 

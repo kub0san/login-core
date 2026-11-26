@@ -186,6 +186,7 @@ public final class MojangClient {
             int statusCode = response.statusCode();
             String body = response.body();
 
+            // 404/204 = NOT_PREMIUM; 403/429/5xx/timeout/malformed = UNKNOWN
             if (statusCode == 200) {
                 Optional<UUID> uuid = parseUuid(body);
                 if (uuid.isPresent()) {

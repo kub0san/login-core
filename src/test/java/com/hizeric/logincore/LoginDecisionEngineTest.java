@@ -213,4 +213,40 @@ class LoginDecisionEngineTest {
             )
         );
     }
+
+    @Test
+    void unknownLookupWithoutLinkIsDeniedByDefault() {
+        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
+            "Notch",
+            false,
+            true,
+            LookupResult.unknown("timeout"),
+            false,
+            null,
+            null,
+            false,
+            false,
+            false
+        );
+
+        assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, LoginDecisionEngine.decide(input));
+    }
+
+    @Test
+    void unknownLookupWithoutLinkPassesThroughWhenAllowed() {
+        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
+            "Notch",
+            false,
+            true,
+            LookupResult.unknown("timeout"),
+            false,
+            null,
+            null,
+            false,
+            false,
+            true
+        );
+
+        assertEquals(LoginDecisionEngine.Decision.PASS_THROUGH, LoginDecisionEngine.decide(input));
+    }
 }

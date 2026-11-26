@@ -147,7 +147,7 @@ public final class LoginCore extends JavaPlugin {
             getLogger().severe("Invalid mode '" + mode + "'. Expected ENFORCE or SHADOW.");
             return false;
         }
-        String lookupFailure = getConfig().getString("on-lookup-failure", "ALLOW");
+        String lookupFailure = getConfig().getString("on-lookup-failure", "DENY");
         if (!"ALLOW".equalsIgnoreCase(lookupFailure) && !"DENY".equalsIgnoreCase(lookupFailure)) {
             getLogger().severe("Invalid on-lookup-failure value '" + lookupFailure + "'. Expected ALLOW or DENY.");
             return false;
