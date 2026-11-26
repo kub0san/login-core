@@ -1,7 +1,7 @@
 # Plan: login-core Phases 4–7 — Build, Prune, Identity, SQLite
 
 ## Scope
-Transform the renamed `login-core` repo (currently an authmePAL-derived plugin) into a minimal standalone AuthMe-derived auth plugin: Java 25 bytecode, Shadow packaging, Paper 1.21.11+ baseline, SQLite only, immutable PREMIUM/OFFLINE classification, automatic premium verification, no enrollment/DB-backend/importer sprawl.
+Transform the renamed `login-core` repo (currently an authmePAL-derived plugin) into a minimal standalone AuthMe-derived auth plugin: Java 25 bytecode, Shadow packaging, Paper 26.3 baseline (the 1.21.11 minimum claim was false — Java 25 bytecode means runtime 26.1+), SQLite only, immutable PREMIUM/OFFLINE classification, automatic premium verification, no enrollment/DB-backend/importer sprawl. Standalone/vendoring is deferred per ADR 0008; see `docs/DEVIATIONS.md`.
 
 ## Current state (verified)
 - Repo: `C:\Projects\login-core`, master @ 9b1dedc, origin login-core.git.
@@ -14,7 +14,7 @@ Transform the renamed `login-core` repo (currently an authmePAL-derived plugin) 
 Goal: lock the build baseline and decide the source-integration strategy (fork AuthMe core vs keep authmePAL layer).
 
 Tasks:
-1. Confirm Paper API pin. Research: AuthMe 6.0.2-SNAPSHOT compiles against `paper-api:1.21.11-R0.1-SNAPSHOT`. login-core compiles against `paper-api:26.2.build.+`. Decision needed: keep 26.2 for dev (test server 26.3) or drop to 1.21.11 for min compat. ADR 0007 says min 1.21.11. Recommendation: compile against 1.21.11 API (reflection for newer) OR keep 26.2 and document min as 26.2. **Open decision — judge.**
+1. ~~Confirm Paper API pin.~~ **Resolved (judge verdict §3, ADR 0007):** pin `paper-api:26.3.build.200-stable` (local `26.3.build.27-alpha`); the "min 1.21.11" claim was false (Java 25 bytecode ⇒ runtime 26.1+).
 2. Add `checkSourceEncoding` task (verbatim from pvp-core) to `build.gradle.kts`, wire into `check`.
 3. Add JUnit 5 + MockBukkit (v1.21 4.116.3) test deps; repeat Paper API as `testImplementation`.
 4. Decide packaging: keep `org.xerial:sqlite-jdbc` in `plugin.yml libraries` (current) OR shade. ADR 0006 says do not relocate; keep libraries. Verify native binaries for prod/test platforms (Linux/Windows x86_64).
@@ -25,7 +25,7 @@ Exit: clean build, encoding guard active, test harness wired.
 ## Phase 5 — Controlled pruning (3–5 sessions, batched)
 Prune in this order; compile + test after each batch; never mass-delete.
 
-Batch 1 — Platform/identity naming: rename packages `org.authmePAL` → `com.hizeric.logincore` (or keep? ADR 0002 keeps plugin name AuthMe but package can change). Decide package namespace. Recommendation: `com.hizeric.logincore` per spec §16. **Open decision — judge.**
+Batch 1 — Platform/identity naming: **Resolved (ADR 0008):** packages are `com.hizeric.logincore`; runtime plugin name stays `AuthMePAL` until the vendoring commit (flip to `AuthMe` deferred — see `docs/DEVIATIONS.md`).
 
 Batch 2 — Remove redundant custom infra that AuthMe already provides:
 - `handshake/` RSA/AES/hasJoined → keep crypto core but rewire to automatic classification (Phase 6). Do NOT delete crypto.
@@ -39,7 +39,7 @@ Batch 3 — Remove unused commands/permissions/config for deleted features:
 - Remove `ChatColor` usage → MiniMessage (AdminCommand.java).
 - Remove legacy Spigot/Bungee/Velocity/Folia refs (none in source yet; verify).
 
-Batch 4 — Dependencies: drop `fr.xephi:authme-core` compileOnly (we fork source instead). Actually authmePAL depends on AuthMe as plugin; login-core is standalone fork → must vendor AuthMe source. **Critical open question: are we vendoring AuthMe core source into login-core, or keeping AuthMe as a runtime plugin dependency?** Spec §4 says "standalone" and "incorporate required upstream source into login-core itself" and "must not depend on separately installed AuthMe plugin." So we must vendor. This is the biggest Phase 5/6 task. **Judge: scope and approach.**
+Batch 4 — Dependencies: **Resolved (ADR 0008):** thin-vendor AuthMe core (schema, hash verify, registration insert, authenticated-state tracking, events façade; ~1–2k LOC), not the full fork. Until that lands, AuthMe remains a runtime plugin dependency and the exit criterion at line 44 is waived — see `docs/DEVIATIONS.md`. Phase 7 has shipped schema/hash compatibility only.
 
 Exit: no external AuthMe plugin dependency; standalone jar builds.
 

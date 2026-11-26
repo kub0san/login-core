@@ -1,0 +1,21 @@
+# NOTICE — provenance and vendored source
+
+This file is required by [ADR 0008](./docs/adr/0008-identity-licensing-vendoring.md)
+before any vendored source is committed.
+
+## Upstream project
+
+- Project: [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded)
+- Licence: GPL-3.0
+- Exact commit vendored from: `56e9a66b`
+
+## Vendored files
+
+none yet — no source file from that commit has been committed to `src/`
+as of 2026-11-27.
+
+When a file is vendored, retain its upstream copyright and licence headers
+verbatim and list it here with its upstream path, for example
+`authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt.java`.
+
+Recorded: 2026-11-27.

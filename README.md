@@ -42,9 +42,9 @@ AuthMePAL is for a direct Paper server, not a proxy network. An offline-mode ser
 5. Start with `mode: SHADOW` and review the server log before enabling enforcement. SHADOW performs name lookups and logs decisions but does not start the premium handshake or block the login.
 6. After checking the intended behavior, change `mode` to `ENFORCE` and restart.
 
-This release starts with a fresh `plugins/AuthMePAL` data folder. Previous plugin configuration and link/exemption data are not preserved; back up the old folder first if you may need its contents.
+This release starts with a fresh `plugins/AuthMePAL` data folder. Previous plugin configuration and link/exemption data are not preserved; back up the old folder first if you may need its contents. The runtime plugin name is still `AuthMePAL`; the flip to `AuthMe` and the data-folder move to `plugins/AuthMe/authme.db` are deferred to the vendoring commit — see [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
 
-The generated config controls Mojang lookup endpoints, lookup-failure behavior, existing AuthMe account policy, throttles, premium UUID mode, timeouts, and kick messages. Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
+The generated config controls Mojang lookup endpoints, lookup-failure behavior, existing AuthMe account policy, throttles, premium UUID mode, timeouts, and kick messages (`name-reserved`, `verify-failed`, `lookup-unavailable`, `account-conflict`, `rename-conflict`, `throttled`). `rename-conflict` tells a renamed premium player that their UUID is linked under another name and that an administrator must resolve it; the old link is never moved automatically. Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
 
 ### Premium UUID mode
 
@@ -91,8 +91,8 @@ The user reports that the previous build's login features worked on their server
 
 ## Credits
 
-AuthMePAL's login flow design was adapted from [FastLogin](https://github.com/games647/FastLogin) (MIT) and [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (GPL-3.0), implemented from scratch against Mojang's public session protocol. No source code was copied from either project. Full provenance, dependency versions, and licences are in [CREDITS.md](./CREDITS.md).
+login-core's login flow design was adapted from [FastLogin](https://github.com/games647/FastLogin) (MIT) and [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (GPL-3.0), implemented against Mojang's public session protocol. The GPL-3.0 licence is inherited from AuthMeReloaded; upstream provenance and any vendored files are recorded in [NOTICE](./NOTICE). Dependency versions and licences are in [CREDITS.md](./CREDITS.md).
 
 ## License
 
-AuthMePAL is licensed under the GNU General Public License v3.0 (GPL-3.0). See [LICENSE](./LICENSE) for the full text.
+login-core (runtime plugin name `AuthMePAL`) is licensed under the GNU General Public License v3.0 (GPL-3.0), inherited from AuthMeReloaded. See [LICENSE](./LICENSE) for the full text and [NOTICE](./NOTICE) for provenance.

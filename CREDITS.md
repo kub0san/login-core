@@ -1,37 +1,30 @@
 # Credits and third-party notices
 
-AuthMePAL is an independent project. This file records where its design came from,
-which third-party components it uses, and what was *not* taken from anyone.
+login-core (runtime plugin name `AuthMePAL`) records here where its design came
+from, which third-party components it uses, and what provenance is owed. The
+runtime name flip to `AuthMe` is deferred to the vendoring commit; see
+`docs/DEVIATIONS.md`.
 
 > This document describes the project's own review of its provenance. It is not legal advice.
 
 ---
 
-## 1. Provenance: no source code was copied
+## 1. Provenance and licence
 
-AuthMePAL's login flow was designed by reading how other plugins do premium
-verification, then implementing it from scratch against Mojang's public session
+login-core (runtime plugin name `AuthMePAL`) is licensed under **GPL-3.0,
+inherited from [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded)**. It
+is not a licence chosen independently of that upstream; ADR 0008 records the
+decision.
+
+The login flow was designed by reading how other plugins do premium
+verification (§2), then implementing it against Mojang's public session
 protocol and the PacketEvents API.
 
-A statement-level comparison of this repository's sources against the upstream
-sources of AuthMeReloaded and FastLogin was run before publication. Comments and
-whitespace were normalised away and every statement of 35 characters or more was
-checked for a verbatim match. The only statements shared with upstream were:
-
-- `import` lines for shared APIs (Bukkit, Netty, PacketEvents, JDK),
-- `Cipher.getInstance("AES/CFB8/NoPadding")`, which the Minecraft protocol requires,
-- a `private final SecureRandom secureRandom;` field declaration, and
-- one `else if (event.getPacketType() == ...)` packet-dispatch line.
-
-No method bodies, classes, messages, tests, or database schemas were taken from
-AuthMeReloaded or FastLogin. All log messages, kick messages, and configuration
-text in this repository were written for it. `ServerHashTest` vectors are values
-from the Minecraft protocol documentation, not from either project.
-
-**Conclusion:** no third-party copyrightable expression was incorporated, so no
-copyleft obligation arises from those projects. What was borrowed is *design* —
-the shape of the handshake and the order of operations — which the project
-credits below.
+Any source vendored from AuthMeReloaded keeps its upstream copyright and licence
+headers verbatim. The root [NOTICE](./NOTICE) records the upstream repository,
+the exact commit, and every vendored file; provenance is tracked there and must
+be updated in the same change that adds a vendored file. The NOTICE currently
+lists "none yet", so no upstream source file has been committed to `src/`.
 
 ---
 
@@ -44,8 +37,8 @@ credits below.
 | [Minecraft protocol documentation](https://wiki.vg/Protocol) | Mojang / community | — | The session-hash algorithm (`SHA-1(serverId + sharedSecret + publicKey)` rendered as signed hex), AES/CFB8 key = IV = shared secret, and the `LOGIN_START` / `ENCRYPTION_REQUEST` / `ENCRYPTION_RESPONSE` packet exchange. |
 | [LuckPerms](https://github.com/LuckPerms/LuckPerms) | LuckPerms contributors | MIT | Read to diagnose the pre-login permission-loading conflict. AuthMePAL now applies the verified profile at `EventPriority.LOWEST` so that LuckPerms' `LOW` handler reads the correct UUID. No LuckPerms code is used. |
 
-Attribution above is given as a courtesy and as documentation of provenance. It
-is not an assertion that any copyleft licence applies to AuthMePAL.
+Attribution above documents the design references. The GPL-3.0 licence and its
+obligations are recorded in §1, §4 and the root [NOTICE](./NOTICE).
 
 ---
 
@@ -59,7 +52,7 @@ is compiled into, shaded into, or redistributed with the AuthMePAL jar.
 | Component | Version | Licence | How it is used |
 |---|---|---|---|
 | [PacketEvents](https://github.com/retrooper/packetevents) (`packetevents-spigot`) | 2.14.0 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL calls its login-phase packet listeners and wrappers. Not bundled. |
-| [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (`authme-core`) | 6.0.1 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL touches AuthMe types only through `AuthMeBridge`. Not bundled. |
+| [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (`authme-core`) | 6.0.1 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL touches AuthMe types through `AuthMeBridge`, `AuthMeLoginListener` and the `fr.xephi.authme.events` façade. Not bundled; the runtime-name flip is deferred (`docs/DEVIATIONS.md`). |
 | [Paper API](https://papermc.io/) (`paper-api`) | 26.3 | See [PaperMC's licence](https://papermc.io/license) | Server API: plugin lifecycle, events, player profiles. |
 | Gson | provided by server | Apache-2.0 | JSON parsing for Mojang responses. |
 | Netty | provided by server | Apache-2.0 | Cipher handlers installed into the login channel pipeline. |
@@ -80,10 +73,11 @@ JUnit 5 (EPL-2.0), Netty (Apache-2.0), Gson (Apache-2.0), SQLite JDBC (Apache-2.
 
 ## 4. Licence of AuthMePAL itself
 
-AuthMePAL is licensed under the **GNU General Public License v3.0 (GPL-3.0)**.
-This is the author's own decision, recorded on 2026-11-26. The full licence text
-is in the root [LICENSE](./LICENSE) file.
+login-core (runtime plugin name `AuthMePAL`) is licensed under the **GNU General
+Public License v3.0 (GPL-3.0)**, inherited from AuthMeReloaded as recorded in
+ADR 0008 (2026-11-26). The full licence text is in the root
+[LICENSE](./LICENSE) file.
 
-As recorded in section 1, no source code was copied from AuthMeReloaded or
-FastLogin. This licence is the project's own choice, not a copyleft obligation
-inherited from those projects.
+Vendored upstream files keep their original copyright and licence headers; the
+root [NOTICE](./NOTICE) records the upstream commit and every vendored file. No
+relicensing is performed.
