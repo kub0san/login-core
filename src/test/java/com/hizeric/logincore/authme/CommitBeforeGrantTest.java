@@ -9,6 +9,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.Plugin;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -206,10 +207,62 @@ class CommitBeforeGrantTest {
             listener.onAsyncPreLogin(event);
 
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
-            assertEquals(List.of("Notch"), registrations);
+            assertTrue(registrations.isEmpty(), "registration is deferred until the login check");
             assertEquals(List.of("Notch"), grants);
+
+            listener.onPlayerLogin(loginEvent());
+
+            assertEquals(List.of("Notch"), registrations);
             assertTrue(committedAtRegistration.get(), "registration must observe the committed identity");
         }
+    }
+
+    @Test
+    void bannedPlayerIsNotRegistered() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("banned.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            List<String> registrations = new ArrayList<>();
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, ignored -> { }, grants::add,
+                name -> false, (name, password) -> {
+                    registrations.add(name);
+                    return true;
+                });
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertTrue(registrations.isEmpty(), "registration is deferred past the login check");
+
+            PlayerLoginEvent login = loginEvent();
+            login.disallow(PlayerLoginEvent.Result.KICK_BANNED, "banned");
+            listener.onPlayerLogin(login);
+
+            assertTrue(registrations.isEmpty(), "a player rejected by the ban check must have no AuthMe account");
+        }
+    }
+
+    @Test
+    void loginRegistrationFailureDisallows() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("login-fail.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            AuthMeLoginListener listener = listener(storage, sessions, ignored -> { }, ignored -> { },
+                name -> false, (name, password) -> false);
+            AsyncPlayerPreLoginEvent event = event();
+            listener.onAsyncPreLogin(event);
+
+            PlayerLoginEvent login = loginEvent();
+            listener.onPlayerLogin(login);
+
+            assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
+        }
+    }
+
+    private static PlayerLoginEvent loginEvent() throws Exception {
+        return new PlayerLoginEvent(player(), "127.0.0.1", InetAddress.getByName("127.0.0.1"));
     }
 
     private static AuthMeLoginListener listener(Storage storage, VerifiedSessions sessions, List<String> grants) {

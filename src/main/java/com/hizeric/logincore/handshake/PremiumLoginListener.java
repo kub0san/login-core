@@ -42,7 +42,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 public final class PremiumLoginListener extends PacketListenerAbstract implements Listener {
@@ -58,7 +57,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
     private final LoginMetrics metrics;
     private final Map<String, Attempt> attempts = new ConcurrentHashMap<>();
     private final Set<String> activeNames = ConcurrentHashMap.newKeySet();
-    private final Map<String, AtomicInteger> pendingByIp = new ConcurrentHashMap<>();
+    private final PendingHandshakeThrottle pendingByIp = new PendingHandshakeThrottle();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
     public PremiumLoginListener(JavaPlugin plugin, AuthMeBridge authMe, Storage storage,
@@ -189,10 +188,8 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             return;
         }
         attempt.nameReserved = true;
-        AtomicInteger pending = pendingByIp.computeIfAbsent(attempt.remoteIp, ignored -> new AtomicInteger());
-        if (pending.incrementAndGet() > getConfigInt("throttle.max-pending-handshakes-per-ip", 2)) {
-            pendingByIp.computeIfPresent(attempt.remoteIp,
-                (ignored, count) -> count.decrementAndGet() <= 0 ? null : count);
+        if (!pendingByIp.reserve(attempt.remoteIp, attempt.normalizedName,
+            getConfigInt("throttle.max-pending-handshakes-per-ip", 2))) {
             disconnect(attempt, "throttled");
             return;
         }
@@ -434,8 +431,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         if (attempt == null || !attempt.ipCounted) {
             return;
         }
-        pendingByIp.computeIfPresent(attempt.remoteIp,
-            (ignored, count) -> count.decrementAndGet() <= 0 ? null : count);
+        pendingByIp.release(attempt.remoteIp, attempt.normalizedName);
         attempt.ipCounted = false;
         if (attempt.timeout != null) {
             attempt.timeout.cancel(false);
@@ -465,7 +461,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             attempt.nameReserved = false;
         }
         if (attempt.ipCounted) {
-            pendingByIp.computeIfPresent(attempt.remoteIp, (ignored, count) -> count.decrementAndGet() <= 0 ? null : count);
+            pendingByIp.release(attempt.remoteIp, attempt.normalizedName);
             attempt.ipCounted = false;
         }
         if (removeVerified) {

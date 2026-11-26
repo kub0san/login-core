@@ -13,11 +13,16 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.Plugin;
 
+import java.net.InetAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BiPredicate;
@@ -33,6 +38,9 @@ public final class AuthMeLoginListener implements Listener {
     private final Consumer<String> grant;
     private final Predicate<String> isRegistered;
     private final BiPredicate<String, String> register;
+    // Registration intent survives from the async pre-login commit to the synchronous login
+    // check so a player rejected by Bukkit's ban check never gets an AuthMe account.
+    private final Map<String, String> pendingRegistrations = new ConcurrentHashMap<>();
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
@@ -132,12 +140,7 @@ public final class AuthMeLoginListener implements Listener {
                             "An account with this name already exists. Please reconnect or contact an administrator.");
                         return;
                     }
-                    String randomPassword = randomPassword();
-                    if (!register.test(event.getName(), randomPassword)) {
-                        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                            "Your account could not be prepared. Please try again or contact an administrator.");
-                        return;
-                    }
+                    pendingRegistrations.put(registrationKey(event.getName(), event.getAddress()), randomPassword());
                 }
                 grant.accept(event.getName());
                 onVerifiedLogin.accept(session.connectionId());
@@ -146,6 +149,27 @@ public final class AuthMeLoginListener implements Listener {
             plugin.getLogger().severe("AuthMe rejected the verified login for " + event.getName() + ": " + ex.getMessage());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                 "Authentication could not be completed. Please try again later.");
+        }
+    }
+
+    /**
+     * Bukkit performs its ban check before this handler, and AuthMe only processes the join at
+     * {@link org.bukkit.event.player.PlayerJoinEvent}. Registering here keeps banned players out of
+     * the account table without delaying or reordering the identity commit at pre-login.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST)
+    public void onPlayerLogin(PlayerLoginEvent event) {
+        Player player = event.getPlayer();
+        if (player == null) {
+            return;
+        }
+        String password = pendingRegistrations.remove(registrationKey(player.getName(), event.getAddress()));
+        if (password == null || event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
+            return;
+        }
+        if (!register.test(player.getName(), password)) {
+            plugin.getLogger().severe("Could not prepare the AuthMe account for " + player.getName());
+            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("account-conflict"));
         }
     }
 
@@ -166,6 +190,10 @@ public final class AuthMeLoginListener implements Listener {
         // Identity was already committed at pre-login; no storage call (and no join) here.
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
         pending.ifPresent(session -> onVerifiedLogin.accept(session.connectionId()));
+    }
+
+    private static String registrationKey(String name, InetAddress address) {
+        return name.toLowerCase(Locale.ROOT) + "@" + (address == null ? "" : address.getHostAddress());
     }
 
     private Component message(String key) {
