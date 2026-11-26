@@ -44,4 +44,17 @@ class AdminCommandTest {
             assertEquals(1, storage.summary().get().classifications());
         }
     }
+
+    @Test
+    void statusReportsUnclassifiedWhenNoRowExists() throws Exception {
+        Path database = temporaryDirectory.resolve("unclassified.db");
+        try (Storage storage = new Storage(database)) {
+            String line = AdminCommand.statusLine(storage.account("LegacyGuy").get(), true,
+                storage.classification("LegacyGuy").get());
+
+            assertTrue(line.contains("classification: UNCLASSIFIED"), line);
+            assertTrue(storage.classification("LEGACYGUY").get().isEmpty());
+            assertEquals(0, storage.summary().get().classifications());
+        }
+    }
 }

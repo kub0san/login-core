@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 public final class AdminCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_ARGUMENTS = List.of("status", "exempt", "migrate");
-    private static final List<String> MIGRATION_ARGUMENTS = List.of("audit", "apply");
+    private static final List<String> MIGRATION_ARGUMENTS = List.of("audit", "apply", "classify");
     private static final List<String> EXEMPT_ARGUMENTS = List.of("add", "remove", "list");
 
     private final JavaPlugin plugin;
@@ -163,7 +163,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
     static String statusLine(Storage.AccountState account, boolean registered, Optional<String> classification) {
         String link = account.link().map(value -> value.mojangUuid() + " (" + value.source() + ")").orElse("none");
         return "AuthMe registered: " + registered + ", link: " + link + ", exempt: " + account.exempt()
-            + ", classification: " + classification.orElse("none");
+            + ", classification: " + classification.orElse("UNCLASSIFIED");
     }
 
     private void handleExempt(CommandSender sender, String[] args) {
@@ -206,6 +206,20 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleMigrate(CommandSender sender, String[] args) {
+        if (args.length == 2 && "classify".equalsIgnoreCase(args[1])) {
+            storage.migrateLegacyClassification().whenComplete((report, error) -> onMain(sender, () -> {
+                if (error != null) {
+                    reportError(sender, error);
+                    return;
+                }
+                sender.sendMessage(ChatColor.GREEN + "Legacy classification: classified " + report.classifiedPremium()
+                    + " PREMIUM, left " + report.leftUnclassified() + " unclassified, already classified "
+                    + report.alreadyClassified() + ".");
+                sender.sendMessage(ChatColor.GRAY + "Backup: "
+                    + (report.backupPath() == null ? "none (empty database)" : report.backupPath()));
+            }));
+            return;
+        }
         if (args.length == 2 && "audit".equalsIgnoreCase(args[1])) {
             sender.sendMessage(ChatColor.YELLOW + "Migration audit started. This may take about one second per AuthMe account.");
             migrationAudit.startAudit().whenComplete((path, error) -> onMain(sender, () -> {
@@ -264,5 +278,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(ChatColor.YELLOW + "/logincore status [name]");
         sender.sendMessage(ChatColor.YELLOW + "/logincore exempt add|remove <name> | exempt list");
         sender.sendMessage(ChatColor.YELLOW + "/logincore migrate audit | migrate apply --exempt-conflicts [--except name,name]");
+        sender.sendMessage(ChatColor.YELLOW + "/logincore migrate classify");
     }
 }

@@ -1,8 +1,10 @@
 package com.hizeric.logincore.storage;
 
 import java.io.IOException;
+import java.nio.file.CopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -10,6 +12,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -27,9 +31,11 @@ public final class Storage implements AutoCloseable {
         thread.setDaemon(true);
         return thread;
     });
+    private final Path databasePath;
     private Connection connection;
 
     public Storage(Path databasePath) throws SQLException, IOException {
+        this.databasePath = databasePath.toAbsolutePath();
         Path parent = databasePath.toAbsolutePath().getParent();
         if (parent != null) {
             Files.createDirectories(parent);
@@ -163,21 +169,84 @@ public final class Storage implements AutoCloseable {
         if (!"PREMIUM".equals(normalizedClassification) && !"OFFLINE".equals(normalizedClassification)) {
             throw new IllegalArgumentException("Unsupported classification: " + classification);
         }
-        return submit(() -> {
-            int inserted = insertClassification(normalizedName, normalizedClassification);
-            if (inserted > 0) {
-                return ClassificationResult.SET;
-            }
-            String stored = storedClassification(normalizedName);
-            return normalizedClassification.equals(stored)
-                ? ClassificationResult.ALREADY_SAME
-                : ClassificationResult.ALREADY_DIFFERENT;
-        });
+        return submit(() -> applyClassification(normalizedName, normalizedClassification));
     }
 
     public CompletableFuture<Optional<String>> classification(String name) {
         String normalizedName = classificationKey(name);
         return submit(() -> Optional.ofNullable(storedClassification(normalizedName)));
+    }
+
+    /**
+     * Classifies legacy accounts once from the evidence already in SQLite: a link with a premium
+     * UUID is strong PREMIUM evidence; a name without one stays UNCLASSIFIED (ADR 0004).
+     */
+    public CompletableFuture<MigrationReport> migrateLegacyClassification() {
+        return submit(() -> {
+            List<String> linkedNames = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT name_lower FROM links WHERE mojang_uuid IS NOT NULL ORDER BY name_lower");
+                 ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    linkedNames.add(result.getString(1));
+                }
+            }
+            List<String> unlinkedNames = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement("""
+                SELECT name_lower FROM exempt WHERE name_lower NOT IN (SELECT name_lower FROM links)
+                ORDER BY name_lower
+                """); ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    unlinkedNames.add(result.getString(1));
+                }
+            }
+
+            Path backup = null;
+            if (!linkedNames.isEmpty() || !unlinkedNames.isEmpty() || countRows("account_classification") > 0) {
+                backup = backupDatabase();
+            }
+
+            int classified = 0;
+            int already = 0;
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                for (String name : linkedNames) {
+                    // Never OFFLINE: a missing premium UUID is not evidence of an offline account.
+                    if (applyClassification(name, "PREMIUM") == ClassificationResult.SET) {
+                        classified++;
+                    } else {
+                        already++;
+                    }
+                }
+                connection.commit();
+            } catch (SQLException | RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+            return new MigrationReport(classified, unlinkedNames.size(), already, backup);
+        });
+    }
+
+    private Path backupDatabase() throws SQLException {
+        // WAL holds the most recent commits; checkpoint so the copied file stands alone.
+        try (Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA wal_checkpoint(TRUNCATE)");
+        }
+        String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
+            .withZone(ZoneOffset.UTC).format(Instant.now());
+        Path backup = databasePath.resolveSibling(databasePath.getFileName() + ".bak-" + timestamp);
+        CopyOption[] options = Files.exists(backup)
+            ? new CopyOption[]{StandardCopyOption.REPLACE_EXISTING}
+            : new CopyOption[0];
+        try {
+            Files.copy(databasePath, backup, options);
+        } catch (IOException ex) {
+            throw new CompletionException(new IllegalStateException("Unable to back up login-core SQLite storage", ex));
+        }
+        return backup;
     }
 
     // Internal-only (login pipeline); never wire this to a command — classification is immutable.
@@ -281,6 +350,17 @@ public final class Storage implements AutoCloseable {
              ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM " + table)) {
             return result.next() ? result.getInt(1) : 0;
         }
+    }
+
+    private ClassificationResult applyClassification(String normalizedName, String classification)
+        throws SQLException {
+        int inserted = insertClassification(normalizedName, classification);
+        if (inserted > 0) {
+            return ClassificationResult.SET;
+        }
+        return classification.equals(storedClassification(normalizedName))
+            ? ClassificationResult.ALREADY_SAME
+            : ClassificationResult.ALREADY_DIFFERENT;
     }
 
     private int insertClassification(String normalizedName, String classification) throws SQLException {
@@ -395,6 +475,10 @@ public final class Storage implements AutoCloseable {
     }
 
     public record Summary(int links, int exemptNames, int classifications) {
+    }
+
+    public record MigrationReport(int classifiedPremium, int leftUnclassified, int alreadyClassified,
+                                  Path backupPath) {
     }
 
     public enum ClassificationResult { SET, ALREADY_SAME, ALREADY_DIFFERENT }
