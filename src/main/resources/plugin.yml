@@ -1,6 +1,6 @@
 name: AuthMePAL
 version: '${version}'
-main: org.authmePAL.AuthMePAL
+main: com.hizeric.logincore.LoginCore
 description: Securely verifies Mojang account ownership and automates AuthMe logins on offline-mode Paper servers.
 authors: [hizeric]
 api-version: '26.3'
@@ -9,10 +9,10 @@ depend: [packetevents, AuthMe]
 libraries:
   - org.xerial:sqlite-jdbc:3.50.3.0
 commands:
-  authmepal:
-    description: AuthMePAL administration
-    usage: /authmepal <status|exempt|link|unlink|migrate>
+  logincore:
+    description: login-core administration
+    usage: /logincore <status|exempt|link|unlink|migrate>
 permissions:
-  authmepal.admin:
-    description: Allows administration of AuthMePAL
+  logincore.admin:
+    description: Allows administration of login-core
     default: op
