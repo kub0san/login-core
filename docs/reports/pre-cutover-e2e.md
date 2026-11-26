@@ -3,7 +3,7 @@
 - Date: 2026-11-27
 - Worktree: `C:\Projects\.worktrees\login-core-standalone`, branch `standalone-password-auth`, HEAD `909678caf736b7b5592c040c70a7e8ad73ed589e` (clean before and after, no tracked source edits).
 - Test server: `C:\Tools\global-test-server-26.3` (Leaf `26.3-27-ver/26.3@06c9c91`, API `26.3.build.27-alpha`, Java 25, game port 25566, offline mode).
-- Assertion owner: Craftwire 0.11.2 shared HTTP hub at `http://127.0.0.1:7777/mcp` (token read from `~/.craftwire/http.json`, deliberately **not** reproduced here). Every claim below is backed by a real tool result (`list_instances` → `server_info` → command/chat/bot calls), never by handshake or log readiness alone.
+- Assertion owner: Craftwire 0.11.2 shared HTTP hub at `http://127.0.0.1:7777/mcp` (token read from `~/.craftwire/http.json`, deliberately **not** reproduced here). The stub-run pass verdict and assertions 1–11 and 13 are backed by retained real tool results in `cw-batch1-result.json` and `cw-batch2-result.json` (`list_instances` → `server_info` → command/chat/bot calls), never by handshake or log readiness alone. Strategy 1 and assertion #12 are report-only because their raw result transcripts were not retained (see Limitations).
 - Verdict: **DONE_WITH_CONCERNS** — login-core's own password auth passes E2E against an authorized test-only `fr.xephi.*` seam stub. Real AuthMe jar interop is **not** proven and is explicitly out of scope for this verdict (see Limitations).
 
 ## 1. Build evidence (real worktree)
@@ -93,6 +93,8 @@ bot_action {bot:"E2EBot1", action:"command", command:"/register RealAuthMeProbe1
 
 Server log line: `[AuthMe] E2EBot1 registered 127.0.0.1` / `[AuthMe] E2EBot1 logged in 127.0.0.1`. These are **AuthMe's** messages, not login-core's `Account registered. You are now logged in.`; `exceptions` returned `{"total":0,"exceptions":[]}`. Conclusion: with the real AuthMe jar, `/login`, `/register` and `/changepassword` cannot execute login-core's password logic. That is a real cutover blocker for real-AuthMe coexistence, but per the follow-up ruling it triggers the authorized seam fallback rather than a BLOCKED verdict.
 
+Evidence retention: the real-AuthMe observations above were reported in-session, but their raw Craftwire transcripts (`getKnownCommands`/`server_eval` output, `PluginVanillaCommandWrapper` lines, AuthMe registration messages, and the real-AuthMe `server_info`) were not retained to disk. They are not independently reproducible from retained artifacts; they support the fallback rationale only, not the pass verdict.
+
 ## 3. Strategy 2 — test-only `fr.xephi.*` seam stub (used for the pass)
 
 Built entirely in `C:\Users\marcus panget\AppData\Local\Temp\opencode\authme-seam-stub`; **no real-worktree source was patched**. The stub is a Bukkit plugin whose `plugin.yml` declares `name: AuthMe` (so login-core's unchanged `depend: [packetevents, AuthMe]` still resolves) with `version: 6.0.1-e2e-seam-stub`, `api-version: '26.3'`, `load: STARTUP`, an empty `JavaPlugin` main, and no commands/listeners. It provides exactly the FQNs bytecode needs:
@@ -144,10 +146,10 @@ All steps below are `bot_spawn`/`bot_action`/`bot_list`/`logs`/`wait_for`/`excep
 | 9 | New password works | `/login PwNew456` | `You are now logged in.` |
 | 10 | Fresh-session offline login | `bot_remove PwBot1` → `bot_spawn names:["PwBot1"]` → `/login PwNew456` | `{"removed":1}`, `{"spawned":1}`, `You are now logged in.` — proves the password persisted and auth state resets per join |
 | 11 | Brute-force counter + kick | `bot_spawn names:["BruteBot"]`, then 5× `/login WrongPass111` | attempts remaining `4,3,2,1` then 5th returned `BOT_NOT_FOUND`; log: `BruteBot lost connection: Too many failed login attempts. Reconnect and try again.` |
-| 12 | Timeout kick | `bot_spawn names:["TimeoutBot"]`, real wait via `wait_for {condition:"log_match",pattern:"Login timed out",timeoutMs:75000}`; `bot_list`, `logs` | log: `TimeoutBot lost connection: Login timed out. Reconnect and log in.`; `bot_list` count 1 (only authenticated `PwBot1`) |
+| 12 | Timeout kick | `bot_spawn names:["TimeoutBot"]`, real wait via `wait_for {condition:"log_match",pattern:"Login timed out",timeoutMs:75000}`; `bot_list`, `logs` | log: `TimeoutBot lost connection: Login timed out. Reconnect and log in.`; `bot_list` count 1 (only authenticated `PwBot1`). Report-only: the raw result transcript was not retained; only request-only `cw-batch3.json` exists. |
 | 13 | Exceptions | `exceptions {instance:"server-1",limit:20}` | `{"total":0,"exceptions":[]}` (twice, before and after timeout) |
 
-Raw tool transcripts are retained at `C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch1-result.json`, `cw-batch2-result.json`, and `cw-batch3-result.json`; build transcripts at `build-main.log`, `build-e2e-copy.log`, `build-authme-seam-stub.log`, `restart-stub.log` in the same temp folder.
+Raw tool transcripts are retained at `C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch1-result.json` and `cw-batch2-result.json` (assertions 1–11 and 13); `cw-batch3.json` is request-only and `cw-batch3-result.json` is absent, so assertion #12 has no retained result transcript. Build transcripts at `build-main.log`, `build-e2e-copy.log`, `build-authme-seam-stub.log`, `restart-stub.log` in the same temp folder.
 
 Note: the shared Craftwire hub reached its 32-idle-session cap (`{"code":-32000,"message":"Too many sessions"}`, hub source `dist/http/serve.js:64`, 30-minute idle TTL). The hub process was restarted once (`npx -y craftwire@0.11.2 serve`, new PID 18696) to clear abandoned sessions; the server plugin reconnected as `server-1`. No MCP token is included in this report.
 
@@ -159,6 +161,7 @@ Note: the shared Craftwire hub reached its 32-idle-session cap (`{"code":-32000,
 4. **Seam stub is not a production AuthMe.** `getLastIp`/`getLastLoginTime` return `null` and `getPlayerInfo` exposes only a registration timestamp; those methods were not exercised by the password-auth assertions.
 5. **`test` was cache-hit** in the recorded build; unit tests were not re-run fresh in this session.
 6. FlectonePulse emitted unrelated `ChannelHandlerContext ... null` warnings for plugin bots on every join; `Craftwire exceptions` grouped zero server exceptions, and none involved login-core. They are pre-existing noise on this shared server.
+7. **Unretained raw transcripts for Strategy 1 and assertion #12.** The real-AuthMe command-ownership/registration transcript and the timeout result transcript were not retained (only `cw-batch3.json` request exists for #12). These observations must not be treated as independently reproducible evidence: they justify the seam fallback and are report-only, not part of the pass verdict.
 
 ## 6. Verdict
 
