@@ -1,4 +1,4 @@
-package org.authmePAL.storage;
+package com.hizeric.logincore.storage;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 public final class Storage implements AutoCloseable {
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "AuthMePAL-SQLite");
+        Thread thread = new Thread(runnable, "login-core-SQLite");
         thread.setDaemon(true);
         return thread;
     });
@@ -60,9 +60,69 @@ public final class Storage implements AutoCloseable {
                         added_by TEXT NOT NULL
                     )
                     """);
+
+                boolean autoCommit = connection.getAutoCommit();
+                connection.setAutoCommit(false);
+                try {
+                    boolean hasClassification = false;
+                    try (ResultSet result = statement.executeQuery("PRAGMA table_info(links)")) {
+                        while (result.next()) {
+                            if ("classification".equals(result.getString("name"))) {
+                                hasClassification = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!hasClassification) {
+                        statement.executeUpdate("ALTER TABLE links ADD COLUMN classification TEXT");
+                    }
+
+                    try {
+                        statement.executeUpdate("""
+                            CREATE UNIQUE INDEX IF NOT EXISTS idx_links_mojang_uuid ON links (mojang_uuid)
+                            """);
+                    } catch (SQLException ex) {
+                        List<String> duplicates = new ArrayList<>();
+                        try (ResultSet result = statement.executeQuery("""
+                            SELECT mojang_uuid FROM links GROUP BY mojang_uuid HAVING COUNT(*) > 1
+                            """)) {
+                            while (result.next()) {
+                                duplicates.add(result.getString(1));
+                            }
+                        }
+                        throw new SQLException("Duplicate premium UUID(s) in links: " + duplicates
+                            + ". Resolve them before starting login-core", ex);
+                    }
+
+                    // IF NOT EXISTS cannot replace the old trigger body, so drop it first.
+                    statement.executeUpdate("DROP TRIGGER IF EXISTS links_classification_immutable");
+                    statement.executeUpdate("""
+                        CREATE TRIGGER IF NOT EXISTS links_classification_immutable
+                        BEFORE UPDATE ON links
+                        WHEN OLD.classification IS NOT NULL
+                          AND (NEW.classification IS NULL OR OLD.classification <> NEW.classification)
+                        BEGIN
+                            SELECT RAISE(ABORT, 'classification is immutable');
+                        END
+                        """);
+
+                    connection.commit();
+                } catch (SQLException ex) {
+                    connection.rollback();
+                    throw ex;
+                } finally {
+                    connection.setAutoCommit(autoCommit);
+                }
             }
         } catch (SQLException ex) {
-            throw new SQLException("Unable to initialize AuthMePAL SQLite storage", ex);
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException closeFailure) {
+                    ex.addSuppressed(closeFailure);
+                }
+            }
+            throw new SQLException("Unable to initialize login-core SQLite storage", ex);
         }
     }
 
@@ -190,7 +250,7 @@ public final class Storage implements AutoCloseable {
             try {
                 return operation.run();
             } catch (SQLException ex) {
-                throw new CompletionException(new IllegalStateException("AuthMePAL storage operation failed", ex));
+                throw new CompletionException(new IllegalStateException("login-core storage operation failed", ex));
             }
         }, executor);
     }
@@ -217,7 +277,7 @@ public final class Storage implements AutoCloseable {
             try {
                 connection.close();
             } catch (SQLException ex) {
-                throw new IllegalStateException("Unable to close AuthMePAL SQLite storage", ex);
+                throw new IllegalStateException("Unable to close login-core SQLite storage", ex);
             }
         }
     }
