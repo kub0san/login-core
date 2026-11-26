@@ -1,10 +1,9 @@
 package com.hizeric.logincore.storage;
 
 import java.io.IOException;
-import java.nio.file.CopyOption;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -26,6 +25,8 @@ import java.util.concurrent.TimeUnit;
 
 public final class Storage implements AutoCloseable {
 
+    private static final int CURRENT_SCHEMA_VERSION = 1;
+
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "login-core-SQLite");
         thread.setDaemon(true);
@@ -45,13 +46,29 @@ public final class Storage implements AutoCloseable {
         } catch (ClassNotFoundException ex) {
             throw new SQLException("SQLite JDBC driver is unavailable", ex);
         }
+        // SQLite creates the file on connect; capture freshness first so a new install is not backed up.
+        boolean databaseExisted = Files.exists(databasePath);
         try {
             connection = DriverManager.getConnection("jdbc:sqlite:" + databasePath.toAbsolutePath());
             try (Statement statement = connection.createStatement()) {
+                // Reject a newer schema before any pragma or DDL writes to it.
+                int schemaVersion = schemaVersion(statement);
+                if (schemaVersion > CURRENT_SCHEMA_VERSION) {
+                    throw new SQLException("Database was written by a newer login-core (user_version "
+                        + schemaVersion + ", supported up to " + CURRENT_SCHEMA_VERSION
+                        + "); refusing to open it");
+                }
+                boolean needsMigration = schemaVersion < CURRENT_SCHEMA_VERSION;
+
                 // Durability pragmas stay idempotent across restarts; they precede all DDL.
                 statement.execute("PRAGMA journal_mode=WAL");
                 statement.execute("PRAGMA busy_timeout=5000");
                 statement.execute("PRAGMA synchronous=NORMAL");
+
+                if (needsMigration && databaseExisted) {
+                    backupDatabase();
+                }
+
                 statement.executeUpdate("""
                     CREATE TABLE IF NOT EXISTS links (
                         name_lower TEXT PRIMARY KEY,
@@ -71,64 +88,76 @@ public final class Storage implements AutoCloseable {
                     )
                     """);
 
-                boolean autoCommit = connection.getAutoCommit();
-                connection.setAutoCommit(false);
-                try {
-                    // links.mojang_uuid is NOT NULL, so OFFLINE accounts cannot live in links.
-                    // Retire the old column (and its trigger) in favour of account_classification.
-                    statement.executeUpdate("DROP TRIGGER IF EXISTS links_classification_immutable");
-                    boolean hasLegacyClassification = false;
-                    try (ResultSet result = statement.executeQuery("PRAGMA table_info(links)")) {
-                        while (result.next()) {
-                            if ("classification".equals(result.getString("name"))) {
-                                hasLegacyClassification = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (hasLegacyClassification) {
-                        statement.executeUpdate("ALTER TABLE links DROP COLUMN classification");
-                    }
-
+                if (needsMigration) {
+                    boolean autoCommit = connection.getAutoCommit();
+                    connection.setAutoCommit(false);
                     try {
-                        statement.executeUpdate("""
-                            CREATE UNIQUE INDEX IF NOT EXISTS idx_links_mojang_uuid ON links (mojang_uuid)
-                            """);
-                    } catch (SQLException ex) {
-                        List<String> duplicates = new ArrayList<>();
-                        try (ResultSet result = statement.executeQuery("""
-                            SELECT mojang_uuid FROM links GROUP BY mojang_uuid HAVING COUNT(*) > 1
-                            """)) {
+                        // links.mojang_uuid is NOT NULL, so OFFLINE accounts cannot live in links.
+                        // Retire the old column (and its trigger) in favour of account_classification.
+                        statement.executeUpdate("DROP TRIGGER IF EXISTS links_classification_immutable");
+                        boolean hasLegacyClassification = false;
+                        try (ResultSet result = statement.executeQuery("PRAGMA table_info(links)")) {
                             while (result.next()) {
-                                duplicates.add(result.getString(1));
+                                if ("classification".equals(result.getString("name"))) {
+                                    hasLegacyClassification = true;
+                                    break;
+                                }
                             }
                         }
-                        throw new SQLException("Duplicate premium UUID(s) in links: " + duplicates
-                            + ". Resolve them before starting login-core", ex);
+
+                        statement.executeUpdate("""
+                            CREATE TABLE IF NOT EXISTS account_classification (
+                                name_lower TEXT PRIMARY KEY,
+                                classification TEXT NOT NULL CHECK (classification IN ('PREMIUM','OFFLINE')),
+                                set_at INTEGER NOT NULL
+                            )
+                            """);
+                        if (hasLegacyClassification) {
+                            try (PreparedStatement copy = connection.prepareStatement("""
+                                INSERT INTO account_classification (name_lower, classification, set_at)
+                                SELECT name_lower, classification, ? FROM links WHERE classification IS NOT NULL
+                                ON CONFLICT(name_lower) DO NOTHING
+                                """)) {
+                                copy.setLong(1, Instant.now().toEpochMilli());
+                                copy.executeUpdate();
+                            }
+                            statement.executeUpdate("ALTER TABLE links DROP COLUMN classification");
+                        }
+
+                        try {
+                            statement.executeUpdate("""
+                                CREATE UNIQUE INDEX IF NOT EXISTS idx_links_mojang_uuid ON links (mojang_uuid)
+                                """);
+                        } catch (SQLException ex) {
+                            List<String> duplicates = new ArrayList<>();
+                            try (ResultSet result = statement.executeQuery("""
+                                SELECT mojang_uuid FROM links GROUP BY mojang_uuid HAVING COUNT(*) > 1
+                                """)) {
+                                while (result.next()) {
+                                    duplicates.add(result.getString(1));
+                                }
+                            }
+                            throw new SQLException("Duplicate premium UUID(s) in links: " + duplicates
+                                + ". Resolve them before starting login-core", ex);
+                        }
+
+                        statement.executeUpdate("""
+                            CREATE TRIGGER IF NOT EXISTS account_classification_immutable
+                            BEFORE UPDATE ON account_classification
+                            WHEN OLD.classification <> NEW.classification
+                            BEGIN
+                                SELECT RAISE(ABORT, 'classification is immutable');
+                            END
+                            """);
+                        // Stamped last, inside the same transaction, so a partial migration is never marked done.
+                        statement.execute("PRAGMA user_version = " + CURRENT_SCHEMA_VERSION);
+                        connection.commit();
+                    } catch (SQLException ex) {
+                        connection.rollback();
+                        throw ex;
+                    } finally {
+                        connection.setAutoCommit(autoCommit);
                     }
-
-                    statement.executeUpdate("""
-                        CREATE TABLE IF NOT EXISTS account_classification (
-                            name_lower TEXT PRIMARY KEY,
-                            classification TEXT NOT NULL CHECK (classification IN ('PREMIUM','OFFLINE')),
-                            set_at INTEGER NOT NULL
-                        )
-                        """);
-                    statement.executeUpdate("""
-                        CREATE TRIGGER IF NOT EXISTS account_classification_immutable
-                        BEFORE UPDATE ON account_classification
-                        WHEN OLD.classification <> NEW.classification
-                        BEGIN
-                            SELECT RAISE(ABORT, 'classification is immutable');
-                        END
-                        """);
-
-                    connection.commit();
-                } catch (SQLException ex) {
-                    connection.rollback();
-                    throw ex;
-                } finally {
-                    connection.setAutoCommit(autoCommit);
                 }
             }
         } catch (SQLException ex) {
@@ -238,15 +267,21 @@ public final class Storage implements AutoCloseable {
         String timestamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")
             .withZone(ZoneOffset.UTC).format(Instant.now());
         Path backup = databasePath.resolveSibling(databasePath.getFileName() + ".bak-" + timestamp);
-        CopyOption[] options = Files.exists(backup)
-            ? new CopyOption[]{StandardCopyOption.REPLACE_EXISTING}
-            : new CopyOption[0];
         try {
-            Files.copy(databasePath, backup, options);
+            // No REPLACE_EXISTING: an existing backup at this timestamp is skipped, not overwritten.
+            Files.copy(databasePath, backup);
+        } catch (FileAlreadyExistsException ex) {
+            return backup;
         } catch (IOException ex) {
-            throw new CompletionException(new IllegalStateException("Unable to back up login-core SQLite storage", ex));
+            throw new SQLException("Unable to back up login-core SQLite storage", ex);
         }
         return backup;
+    }
+
+    private static int schemaVersion(Statement statement) throws SQLException {
+        try (ResultSet result = statement.executeQuery("PRAGMA user_version")) {
+            return result.next() ? result.getInt(1) : 0;
+        }
     }
 
     /**

@@ -4,7 +4,9 @@ import com.hizeric.logincore.storage.Storage;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -13,6 +15,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -186,6 +190,63 @@ class StorageTest {
     }
 
     @Test
+    void newerSchemaVersionIsRejected() throws Exception {
+        Path database = temporaryDirectory.resolve("newer-schema.db");
+        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
+            statement.execute("PRAGMA user_version = 2");
+        }
+
+        SQLException failure = assertThrows(SQLException.class, () -> new Storage(database));
+        StringBuilder messages = new StringBuilder();
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            messages.append(cause.getMessage()).append('\n');
+        }
+        assertTrue(messages.toString().contains("user_version 2"));
+        assertTrue(messages.toString().contains("newer login-core"));
+    }
+
+    @Test
+    void startupCreatesABackupBeforeDdl() throws Exception {
+        Path database = temporaryDirectory.resolve("startup-backup.db");
+        createLegacyDatabase(database, "PREMIUM");
+
+        try (Storage storage = new Storage(database)) {
+            assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
+            assertFalse(hasColumn(database, "links", "classification"));
+            assertEquals(1, userVersion(database));
+            assertEquals(1, backups(database).size(), "startup takes exactly one backup before the migration DDL");
+        }
+    }
+
+    @Test
+    void freshInstallSkipsBackup() throws Exception {
+        Path database = temporaryDirectory.resolve("fresh-no-backup.db");
+        try (Storage storage = new Storage(database)) {
+            assertEquals(0, storage.summary().get().links());
+        }
+        assertTrue(backups(database).isEmpty(), "no pre-existing file means nothing to back up");
+        assertEquals(1, userVersion(database));
+    }
+
+    @Test
+    void secondStartupIsIdempotent() throws Exception {
+        Path database = temporaryDirectory.resolve("second-startup.db");
+        createLegacyDatabase(database, "PREMIUM");
+
+        try (Storage first = new Storage(database)) {
+            assertEquals("PREMIUM", first.classification("notch").get().orElseThrow());
+        }
+        List<Path> afterFirst = backups(database);
+        assertEquals(1, afterFirst.size());
+
+        try (Storage second = new Storage(database)) {
+            assertEquals("PREMIUM", second.classification("notch").get().orElseThrow());
+        }
+        assertEquals(afterFirst, backups(database), "a second startup must not take another backup");
+        assertEquals(1, userVersion(database));
+    }
+
+    @Test
     void storedClassificationCannotBeChangedDirectly() throws Exception {
         Path database = temporaryDirectory.resolve("immutable.db");
         try (Storage storage = new Storage(database);
@@ -327,6 +388,55 @@ class StorageTest {
                 assertTrue(result.next());
                 assertEquals(0, result.getInt(1));
             }
+        }
+    }
+
+    private static void createLegacyDatabase(Path database, String classification) throws Exception {
+        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                CREATE TABLE links (
+                    name_lower TEXT PRIMARY KEY,
+                    mojang_uuid TEXT NOT NULL,
+                    canonical_name TEXT,
+                    linked_at INTEGER NOT NULL,
+                    last_verified_at INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    classification TEXT
+                )
+                """);
+        }
+        try (Connection connection = open(database);
+             PreparedStatement insert = connection.prepareStatement("""
+                 INSERT INTO links (name_lower, mojang_uuid, canonical_name, linked_at, last_verified_at, source, classification)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)
+                 """)) {
+            insert.setString(1, "notch");
+            insert.setString(2, UUID);
+            insert.setString(3, "Notch");
+            insert.setLong(4, 0);
+            insert.setLong(5, 0);
+            insert.setString(6, "AUTO");
+            insert.setString(7, classification);
+            insert.executeUpdate();
+        }
+    }
+
+    private static List<Path> backups(Path database) throws IOException {
+        List<Path> found = new ArrayList<>();
+        try (DirectoryStream<Path> entries = Files.newDirectoryStream(database.getParent(),
+            database.getFileName() + ".bak-*")) {
+            for (Path entry : entries) {
+                found.add(entry);
+            }
+        }
+        found.sort(null);
+        return found;
+    }
+
+    private static int userVersion(Path database) throws Exception {
+        try (Connection connection = open(database); Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("PRAGMA user_version")) {
+            return result.next() ? result.getInt(1) : 0;
         }
     }
 
