@@ -40,7 +40,7 @@ class PremiumLoginListenerCleanupTest {
     void releaseRemovesPendingAttemptAndThrottle() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("cleanup.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
-            PremiumLoginListener listener = new PremiumLoginListener(TestPlugin.create(), null, storage,
+            PremiumLoginListener listener = new PremiumLoginListener(TestPlugin.create(), storage,
                 sessions, null, null, null, new LoginMetrics());
             EmbeddedChannel channel = new EmbeddedChannel();
             String connectionId = "channel-1:123";
@@ -74,7 +74,7 @@ class PremiumLoginListenerCleanupTest {
     void releaseWithoutAttemptStillClearsVerifiedSession() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("cleanup-no-attempt.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
-            PremiumLoginListener listener = new PremiumLoginListener(TestPlugin.create(), null, storage,
+            PremiumLoginListener listener = new PremiumLoginListener(TestPlugin.create(), storage,
                 sessions, null, null, null, new LoginMetrics());
             String connectionId = "channel-2:456";
             sessions.put(session(connectionId));

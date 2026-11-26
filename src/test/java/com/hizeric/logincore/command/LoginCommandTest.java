@@ -29,7 +29,7 @@ class LoginCommandTest {
         storage = new Storage(temporaryDirectory.resolve("login.db"));
         storage.registerPlayer("OfflineGuy", "secret12").get();
         state = new AuthState();
-        command = new LoginCommand(TestPlugin.create(), Runnable::run, storage, state);
+        command = new LoginCommand(TestPlugin.create(), Runnable::run, storage, state, player -> true);
     }
 
     @AfterEach
@@ -46,6 +46,18 @@ class LoginCommandTest {
         assertTrue(state.isAuthenticated("offlineguy"));
         assertTrue(player.said("logged in"), player.transcript());
         assertTrue(player.kicks().isEmpty());
+    }
+
+    @Test
+    void rejectedPasswordHookSkipsGrantAndSuccessMessage() {
+        Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
+        LoginCommand hooked = new LoginCommand(TestPlugin.create(), Runnable::run, storage, state,
+            candidate -> false);
+
+        assertTrue(hooked.onCommand(player.player(), null, "login", new String[]{"secret12"}));
+
+        assertFalse(state.isAuthenticated("offlineguy"));
+        assertTrue(player.transcript().isEmpty(), player.transcript());
     }
 
     @Test

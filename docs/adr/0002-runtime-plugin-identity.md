@@ -13,7 +13,7 @@ Agent F compatibility audit: renaming the runtime plugin to `login-core` would o
 
 - Keep `plugin.yml` `name: AuthMe` (runtime identity unchanged) so existing data folders, API singletons, and downstream dependencies continue to work.
 - Rename repository, artifact, group, and development project to `login-core` / `com.hizeric.logincore`.
-- Preserve the `AuthMeApi` façade and lifecycle events as a compatibility surface; drop only implementations of removed features (email, 2FA, GeoIP, etc.) while keeping class names as no-op stubs where referenced.
+- Preserve runtime identity and the `authme` database shape; downstream `LoginEvent`/`RegisterEvent` compatibility is provided by `com.hizeric.logincore.events`. The `AuthMeApi` singleton façade is not provided — login-core handles password auth itself and does not require an AuthMe installation.
 
 ## Consequences
 

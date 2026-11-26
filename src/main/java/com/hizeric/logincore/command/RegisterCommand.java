@@ -1,5 +1,6 @@
 package com.hizeric.logincore.command;
 
+import com.hizeric.logincore.events.RegisterEvent;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -47,7 +48,7 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
             message(sender, "<red>Password must be between 6 and 72 bytes.");
             return true;
         }
-        workers.execute(() -> register(sender, player.getName(), args[0]));
+        workers.execute(() -> register(sender, player, args[0]));
         return true;
     }
 
@@ -56,7 +57,8 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
         return List.of();
     }
 
-    private void register(CommandSender sender, String name, String password) {
+    private void register(CommandSender sender, Player player, String password) {
+        String name = player.getName();
         try {
             if ("PREMIUM".equals(storage.classification(name).get().orElse(null))) {
                 onMain(() -> message(sender, "<red>Premium accounts do not use passwords."));
@@ -69,6 +71,7 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
             storage.setLoggedIn(name).get();
             onMain(() -> {
                 authState.authenticate(name);
+                plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
                 message(sender, "<green>Account registered. You are now logged in.");
             });
         } catch (Exception ex) {

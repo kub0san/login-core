@@ -237,6 +237,63 @@ public final class Storage implements AutoCloseable {
         });
     }
 
+    /** True when an authme row exists for the name, case-insensitively. */
+    public CompletableFuture<Boolean> isRegistered(String name) {
+        if (name == null || name.isBlank()) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT 1 FROM authme WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, normalize(name));
+                try (ResultSet result = statement.executeQuery()) {
+                    return result.next();
+                }
+            }
+        });
+    }
+
+    /** All registered authme names, ordered case-insensitively. */
+    public CompletableFuture<List<String>> registeredNames() {
+        return submit(() -> {
+            List<String> names = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT username FROM authme ORDER BY username COLLATE NOCASE");
+                 ResultSet result = statement.executeQuery()) {
+                while (result.next()) {
+                    names.add(result.getString(1));
+                }
+            }
+            return List.copyOf(names);
+        });
+    }
+
+    /** Local projection of an authme row; empty when the name is not registered. */
+    public CompletableFuture<Optional<PlayerInfo>> playerInfo(String name) {
+        if (name == null || name.isBlank()) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT lastlogin, ip, regdate FROM authme WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, normalize(name));
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next()) {
+                        return Optional.empty();
+                    }
+                    long lastLogin = result.getLong("lastlogin");
+                    boolean hasLastLogin = !result.wasNull();
+                    String lastIp = result.getString("ip");
+                    long registeredAt = result.getLong("regdate");
+                    return Optional.of(new PlayerInfo(
+                        hasLastLogin ? Optional.of(Instant.ofEpochMilli(lastLogin)) : Optional.empty(),
+                        lastIp == null ? Optional.empty() : Optional.of(lastIp),
+                        Instant.ofEpochMilli(registeredAt)));
+                }
+            }
+        });
+    }
+
     /** Registers a new offline account with a BCrypt password hash. Returns false if the name is already registered. */
     public CompletableFuture<Boolean> registerPlayer(String name, String password) {
         if (name == null || name.isBlank() || password == null || password.isBlank()) {
@@ -683,6 +740,10 @@ public final class Storage implements AutoCloseable {
     }
 
     public record Link(String name, String mojangUuid, String canonicalName, String source) {
+    }
+
+    /** Local projection of AuthMe account data so callers never depend on a vendor type. */
+    public record PlayerInfo(Optional<Instant> lastLogin, Optional<String> lastIp, Instant registeredAt) {
     }
 
     public record AccountState(Optional<Link> link, boolean exempt) {

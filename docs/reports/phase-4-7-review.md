@@ -1,5 +1,7 @@
 # Phase 4–7 Review — login-core
 
+> **Superseded (2026-11-27):** this was a historical review of the pre-cutover tree. The standalone cutover described in §1/§5/§7 has since landed: `AuthMeBridge` and `fr.xephi:authme-core` were removed, `plugin.yml` declares only `depend: [packetevents]`, password auth and the compatibility events are implemented locally, and the database filename is `authme.db`. Live E2E is not claimed here; it is owned by the separate cutover gate. The findings below are retained as history, not as current state.
+
 ## 1. Headline finding: NOT standalone (user's concern confirmed)
 
 **Status: NOT standalone.** The plugin still hard-depends on AuthMe being installed:

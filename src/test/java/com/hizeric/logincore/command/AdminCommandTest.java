@@ -28,7 +28,7 @@ class AdminCommandTest {
 
     @Test
     void noCommandMutatesIdentityType() {
-        AdminCommand command = new AdminCommand(null, null, null, null, null, null, null);
+        AdminCommand command = new AdminCommand(null, null, null, null, null, null);
         CommandSender sender = (CommandSender) Proxy.newProxyInstance(
             CommandSender.class.getClassLoader(), new Class<?>[]{CommandSender.class},
             (proxy, method, args) -> "hasPermission".equals(method.getName()) ? Boolean.TRUE : null);
@@ -89,7 +89,7 @@ class AdminCommandTest {
             MigrationAudit audit = audit(storage, temporaryDirectory.resolve("data"));
             ExecutorService workers = Executors.newSingleThreadExecutor();
             try {
-                AdminCommand command = new AdminCommand(TestPlugin.create(), null, storage, null,
+                AdminCommand command = new AdminCommand(TestPlugin.create(), storage, null,
                     audit, workers, new LoginMetrics());
                 CommandSender sender = sender();
                 for (String[] args : new String[][]{
@@ -123,7 +123,7 @@ class AdminCommandTest {
             MigrationAudit audit = audit(storage, temporaryDirectory.resolve("data"));
             ExecutorService workers = Executors.newSingleThreadExecutor();
             try {
-                AdminCommand command = new AdminCommand(TestPlugin.create(), null, storage, null,
+                AdminCommand command = new AdminCommand(TestPlugin.create(), storage, null,
                     audit, workers, new LoginMetrics());
 
                 assertTrue(command.onCommand(sender(), null, "logincore", new String[]{"migrate", "classify"}));

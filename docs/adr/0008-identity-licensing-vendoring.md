@@ -15,7 +15,7 @@ Three contradictions blocked progress:
 
 **Licensing.** login-core is GPL-3.0 (inherited from AuthMeReloaded). Vendoring GPL-3.0 source is permitted and requires: retaining upstream copyright headers and LICENSE, adding a NOTICE/PROVENANCE file recording upstream repo + exact commit SHA + modified files, updating CREDITS.md to acknowledge vendored source (remove "no source copied" claim). No relicensing.
 
-**Vendoring.** Thin vendor only: schema-compatible `authme` table, hash verify (BCrypt/Argon2), registration insert, authenticated-state tracking, events façade for downstream. ~1–2k LOC. Do not vendor the full AuthMe pipeline; login-core already owns handshake, Mojang client/cache/budget, decision engine, SQLite links. AuthMeBridge/AuthMeLoginListener remain the only AuthMe-touching files until vendoring lands, then are replaced.
+**Vendoring (cutover complete).** Thin vendor only: schema-compatible `authme` table, hash verify (BCrypt; Argon2 rejected), registration insert, authenticated-state tracking, events façade for downstream. `AuthMeBridge` was deleted and `AuthMeLoginListener` rewritten to use `Storage` plus `com.hizeric.logincore.events.LoginEvent`/`RegisterEvent`; `fr.xephi:authme-core` and the AuthMe `depend`/startup check are gone. The full AuthMe pipeline is not vendored; login-core owns handshake, Mojang client/cache/budget, decision engine and SQLite links.
 
 ## Consequences
 

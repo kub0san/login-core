@@ -1,6 +1,5 @@
 package com.hizeric.logincore.command;
 
-import com.hizeric.logincore.authme.AuthMeBridge;
 import com.hizeric.logincore.handshake.LoginMetrics;
 import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.mojang.MojangClient;
@@ -33,17 +32,15 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
     private static final List<String> EXEMPT_ARGUMENTS = List.of("add", "remove", "list");
 
     private final JavaPlugin plugin;
-    private final AuthMeBridge authMe;
     private final Storage storage;
     private final MojangClient mojang;
     private final MigrationAudit migrationAudit;
     private final ExecutorService workers;
     private final LoginMetrics loginMetrics;
 
-    public AdminCommand(JavaPlugin plugin, AuthMeBridge authMe, Storage storage, MojangClient mojang,
+    public AdminCommand(JavaPlugin plugin, Storage storage, MojangClient mojang,
                         MigrationAudit migrationAudit, ExecutorService workers, LoginMetrics loginMetrics) {
         this.plugin = plugin;
-        this.authMe = authMe;
         this.storage = storage;
         this.mojang = mojang;
         this.migrationAudit = migrationAudit;
@@ -148,7 +145,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
     }
 
     private void showPlayerStatus(CommandSender sender, String name) {
-        CompletableFuture<Boolean> registered = CompletableFuture.supplyAsync(() -> authMe.isRegistered(name), workers);
+        CompletableFuture<Boolean> registered = storage.isRegistered(name);
         CompletableFuture<Optional<String>> classification = storage.classification(name);
         CompletableFuture<Storage.AccountState> account = storage.account(name);
         // A renamed premium name has no link of its own; resolve its UUID to surface the stale link.
