@@ -118,6 +118,9 @@ public final class LoginDecisionEngine {
         if (!authMeRegistered) {
             return PostVerifyAction.REGISTER_AND_AUTO_LOGIN;
         }
+        // A stored link is the commit marker: only an already-committed identity auto-logs in.
+        // An existing but unlinked account stays at REQUIRE_PASSWORD_ONCE until its password is
+        // proven, so an uncommitted session can never be granted by this decision.
         if (linkedUuid != null) {
             return PostVerifyAction.AUTO_LOGIN;
         }

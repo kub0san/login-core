@@ -30,6 +30,7 @@ login-core securely verifies Mojang account ownership on offline-mode Paper serv
 - AuthMeReloaded 6.0.1 installed as a server plugin
 - `online-mode=false` in `server.properties`
 - AuthMe `settings.enablePremium: false` (AuthMePAL will disable itself if AuthMe's premium handshake is enabled)
+- Existing AuthMe SQLite `authme` rows are read for password verification; Argon2 hashes are rejected with a reset-password message
 
 AuthMePAL is for a direct Paper server, not a proxy network. An offline-mode server accepts unverified names for accounts that are not linked to premium identities; restrict network access appropriately and do not expose an offline-mode backend to untrusted clients.
 

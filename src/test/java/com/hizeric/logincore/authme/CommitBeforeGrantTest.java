@@ -5,6 +5,8 @@ import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
 import fr.xephi.authme.events.LoginEvent;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -75,7 +77,7 @@ class CommitBeforeGrantTest {
     }
 
     @Test
-    void successfulCommitGrantsAfterWrites() throws Exception {
+    void autoLoginStillCommitsBeforeGrant() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("success.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(session());
@@ -180,7 +182,7 @@ class CommitBeforeGrantTest {
     }
 
     @Test
-    void passwordOnceCommitsAtPreLoginAndSurvivesUntilLoginEvent() throws Exception {
+    void requirePasswordOnceDoesNotCommitBeforePassword() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("password-once.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(passwordOnceSession());
@@ -195,35 +197,87 @@ class CommitBeforeGrantTest {
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
             assertTrue(grants.isEmpty(), "the password step must not auto-grant");
             assertTrue(released.isEmpty(), "releaseAfterAuth belongs to LoginEvent on this path");
-            assertEquals("PREMIUM", storage.classification("Notch").get().orElseThrow());
-            assertTrue(storage.link("Notch").get().isPresent());
+            assertTrue(storage.classification("Notch").get().isEmpty(),
+                "no classification may be committed before the password");
+            assertTrue(storage.link("Notch").get().isEmpty(),
+                "no link may be committed before the password");
             assertTrue(sessions.find("Notch", event.getAddress()).isPresent(),
                 "the session must survive to LoginEvent for the password step");
-
-            listener.onAuthMeLogin(new LoginEvent(player()));
-
-            assertEquals(List.of("connection"), released);
-            assertTrue(sessions.find("Notch", event.getAddress()).isEmpty());
         }
     }
 
     @Test
-    void passwordOnceCommitFailureRejectsWithoutGrant() throws Exception {
+    void requirePasswordOnceCommitsAfterPasswordLogin() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("password-once-ok.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(passwordOnceSession());
+            List<String> released = new ArrayList<>();
+            List<String> kicks = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, released::add,
+                name -> { }, name -> true, (name, password) -> true);
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertTrue(storage.link("Notch").get().isEmpty());
+
+            listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+
+            assertEquals("PREMIUM", storage.classification("Notch").get().orElseThrow());
+            Storage.Link link = storage.link("Notch").get().orElseThrow();
+            assertEquals(UUID_TEXT, link.mojangUuid());
+            assertEquals("PASSWORD_ONCE", link.source());
+            assertEquals(List.of("connection"), released);
+            assertTrue(kicks.isEmpty(), "a successful commit must not kick");
+            assertTrue(sessions.find("Notch", event.getAddress()).isEmpty(), "the session is one-shot");
+        }
+    }
+
+    @Test
+    void requirePasswordOnceCommitFailureDoesNotRelease() throws Exception {
         Storage storage = new Storage(temporaryDirectory.resolve("password-once-fail.db"));
         storage.close();
         VerifiedSessions sessions = new VerifiedSessions();
         sessions.put(passwordOnceSession());
-        List<String> grants = new ArrayList<>();
-        AuthMeLoginListener listener = listener(storage, sessions, ignored -> { },
-            name -> grants.add(name), name -> true, (name, password) -> true);
+        List<String> released = new ArrayList<>();
+        List<String> kicks = new ArrayList<>();
+        AuthMeLoginListener listener = listener(storage, sessions, released::add,
+            name -> { }, name -> true, (name, password) -> true);
         AsyncPlayerPreLoginEvent event = event();
 
         listener.onAsyncPreLogin(event);
+        assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult(),
+            "the failure belongs to LoginEvent, not pre-login");
 
-        assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
-        assertTrue(grants.isEmpty());
-        assertTrue(sessions.find("Notch", event.getAddress()).isPresent(),
-            "the password-once session is not consumed on the rejected path");
+        listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+
+        assertTrue(released.isEmpty(), "releaseAfterAuth must not run after a failed commit");
+        assertTrue(kicks.get(0).contains("account-conflict"), kicks.toString());
+        assertTrue(sessions.find("Notch", event.getAddress()).isEmpty());
+    }
+
+    @Test
+    void requirePasswordOnceClassificationConflictDoesNotRelease() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("password-once-conflict.db"))) {
+            storage.setClassification("Notch", "OFFLINE").get();
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(passwordOnceSession());
+            List<String> released = new ArrayList<>();
+            List<String> kicks = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, released::add,
+                name -> { }, name -> true, (name, password) -> true);
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+
+            listener.onAuthMeLogin(new LoginEvent(player(kicks)));
+
+            assertTrue(released.isEmpty(), "ALREADY_DIFFERENT must not release");
+            assertTrue(kicks.get(0).contains("account-conflict"), kicks.toString());
+            assertEquals("OFFLINE", storage.classification("Notch").get().orElseThrow());
+            assertTrue(storage.link("Notch").get().isEmpty(), "no link after a CAS conflict");
+        }
     }
 
     @Test
@@ -362,10 +416,22 @@ class CommitBeforeGrantTest {
     }
 
     private static Player player() {
+        return player(new ArrayList<>());
+    }
+
+    private static Player player(List<String> kicks) {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
             (proxy, method, args) -> switch (method.getName()) {
                 case "getName" -> "Notch";
                 case "getAddress" -> new InetSocketAddress("127.0.0.1", 25565);
+                case "kick" -> {
+                    kicks.add("kick:" + MiniMessage.miniMessage().serialize((Component) args[0]));
+                    yield null;
+                }
+                case "kickPlayer" -> {
+                    kicks.add("kickPlayer:" + args[0]);
+                    yield null;
+                }
                 default -> null;
             });
     }
@@ -396,7 +462,7 @@ class CommitBeforeGrantTest {
             shouldRegister,
             requiresPasswordOnce,
             !requiresPasswordOnce,
-            "AUTO"
+            requiresPasswordOnce ? "PASSWORD_ONCE" : "AUTO"
         );
     }
 

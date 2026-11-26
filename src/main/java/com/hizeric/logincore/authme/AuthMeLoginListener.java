@@ -92,9 +92,9 @@ public final class AuthMeLoginListener implements Listener {
     }
 
     /**
-     * Identity (classification + link) is proven by the handshake, so it is committed here for
-     * every policy before AuthMe can authenticate. Only auto-login paths consume the session;
-     * REQUIRE_PASSWORD_ONCE keeps it for {@link #onAuthMeLogin(LoginEvent)}.
+     * Auto-login paths prove identity with the handshake, so classification + link are committed
+     * here before the grant. REQUIRE_PASSWORD_ONCE does not commit: AuthMe must verify the account
+     * password first, and {@link #onAuthMeLogin(LoginEvent)} commits only after that succeeds.
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onAsyncPreLogin(AsyncPlayerPreLoginEvent event) {
@@ -107,18 +107,54 @@ public final class AuthMeLoginListener implements Listener {
             return;
         }
         if (session.requiresPasswordOnce()) {
+            // The existing account must still exist, but no identity write is allowed before the
+            // password; the session survives to LoginEvent for the commit.
             if (!isRegistered.test(event.getName())) {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                     "Your AuthMe account changed during login. Please reconnect.");
-                return;
             }
-        } else {
-            // One-shot consume on auto-login paths, before any commit or grant.
-            verifiedSessions.consume(event.getName(), event.getAddress());
+            return;
         }
+        if (!session.autoLogin()) {
+            // Fail closed: no other policy may be granted before a password is proven.
+            return;
+        }
+        // One-shot consume on auto-login paths, before any commit or grant.
+        verifiedSessions.consume(event.getName(), event.getAddress());
 
         try {
-            // Single join, on the async pre-login thread: never on the main thread.
+            // Single transactional commit, on the async pre-login thread: never on the main thread.
+            CommitResult result = commitIdentity(session);
+            if (result == CommitResult.RENAME_CONFLICT) {
+                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("rename-conflict"));
+                return;
+            }
+            if (result == CommitResult.CONFLICT) {
+                plugin.getLogger().severe("Premium identity for " + session.name()
+                    + " could not be persisted; refusing to grant access.");
+                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
+                return;
+            }
+            if (session.shouldRegister()) {
+                if (isRegistered.test(event.getName())) {
+                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                        "An account with this name already exists. Please reconnect or contact an administrator.");
+                    return;
+                }
+                pendingRegistrations.put(registrationKey(event.getName(), event.getAddress()), randomPassword());
+            }
+            grant.accept(event.getName());
+            onVerifiedLogin.accept(session.connectionId());
+        } catch (RuntimeException ex) {
+            plugin.getLogger().severe("AuthMe rejected the verified login for " + event.getName() + ": " + ex.getMessage());
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                "Authentication could not be completed. Please try again later.");
+        }
+    }
+
+    /** Write-once PREMIUM classification + link in one transaction; never grants by itself. */
+    private CommitResult commitIdentity(VerifiedSession session) {
+        try {
             String mojangUuid = session.mojangSession().uuid().toString();
             if (session.link().isEmpty()) {
                 Optional<Storage.Link> byUuid = storage.linkByUuid(mojangUuid).join();
@@ -126,39 +162,14 @@ public final class AuthMeLoginListener implements Listener {
                     plugin.getLogger().warning("Premium UUID " + mojangUuid + " is already linked to "
                         + byUuid.get().name() + "; refusing rename to " + session.name()
                         + " (the old link is left untouched)");
-                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("rename-conflict"));
-                    return;
+                    return CommitResult.RENAME_CONFLICT;
                 }
             }
-            boolean committed;
-            try {
-                committed = storage.commitPremiumIdentity(session.name(), mojangUuid,
-                    session.mojangSession().canonicalName(), session.linkSource()).join();
-            } catch (CompletionException | RejectedExecutionException ex) {
-                committed = false;
-            }
-            if (!committed) {
-                plugin.getLogger().severe("Premium identity for " + session.name()
-                    + " could not be persisted; refusing to grant access.");
-                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
-                return;
-            }
-            if (session.autoLogin()) {
-                if (session.shouldRegister()) {
-                    if (isRegistered.test(event.getName())) {
-                        event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                            "An account with this name already exists. Please reconnect or contact an administrator.");
-                        return;
-                    }
-                    pendingRegistrations.put(registrationKey(event.getName(), event.getAddress()), randomPassword());
-                }
-                grant.accept(event.getName());
-                onVerifiedLogin.accept(session.connectionId());
-            }
-        } catch (RuntimeException ex) {
-            plugin.getLogger().severe("AuthMe rejected the verified login for " + event.getName() + ": " + ex.getMessage());
-            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
-                "Authentication could not be completed. Please try again later.");
+            return storage.commitPremiumIdentity(session.name(), mojangUuid,
+                session.mojangSession().canonicalName(), session.linkSource()).join()
+                ? CommitResult.COMMITTED : CommitResult.CONFLICT;
+        } catch (CompletionException | RejectedExecutionException ex) {
+            return CommitResult.CONFLICT;
         }
     }
 
@@ -191,16 +202,38 @@ public final class AuthMeLoginListener implements Listener {
         }
     }
 
+    /**
+     * AuthMe fires this after a successful password login. REQUIRE_PASSWORD_ONCE sessions survive
+     * pre-login; commit their identity first, and only then release. A failed commit kicks instead.
+     * Auto-login sessions were consumed at pre-login, so this is one-shot.
+     */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onAuthMeLogin(LoginEvent event) {
         Player player = event.getPlayer();
         if (player == null) {
             return;
         }
-        // Identity was already committed at pre-login; no storage call (and no join) here.
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
-        pending.ifPresent(session -> onVerifiedLogin.accept(session.connectionId()));
+        if (pending.isEmpty()) {
+            return;
+        }
+        VerifiedSession session = pending.get();
+        CommitResult result;
+        try {
+            result = commitIdentity(session);
+        } catch (RuntimeException ex) {
+            result = CommitResult.CONFLICT;
+        }
+        if (result != CommitResult.COMMITTED) {
+            plugin.getLogger().severe("Premium identity for " + session.name()
+                + " could not be persisted after password login; refusing to release.");
+            player.kick(message("account-conflict"));
+            return;
+        }
+        onVerifiedLogin.accept(session.connectionId());
     }
+
+    private enum CommitResult { COMMITTED, CONFLICT, RENAME_CONFLICT }
 
     private static String registrationKey(String name, InetAddress address) {
         return name.toLowerCase(Locale.ROOT) + "@" + (address == null ? "" : address.getHostAddress());
