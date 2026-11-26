@@ -9,13 +9,28 @@ before any vendored source is committed.
 - Licence: GPL-3.0
 - Exact commit vendored from: `56e9a66b`
 
+The vendored file below is a self-contained public-domain BCrypt implementation
+(jBCrypt 0.4, Damien Miller, ISC), vendored because AuthMe's own BCrypt wrappers
+at `56e9a66b` delegate to BouncyCastle, which login-core does not ship.
+
 ## Vendored files
 
-none yet — no source file from that commit has been committed to `src/`
-as of 2026-11-27.
+- `src/main/java/com/hizeric/logincore/authme/BCrypt.java` — self-contained BCrypt
+  implementation vendored from jBCrypt 0.4 (Damien Miller, ISC-style licence),
+  upstream path `src/main/java/org/mindrot/BCrypt.java` at
+  https://github.com/jeremyh/jBCrypt (tree `e015c2c`); upstream copyright header
+  retained verbatim. Package renamed and `hashpw` widened to accept `$2b$`/`$2y$`.
+  AuthMeReloaded commit `56e9a66b` is the behavioural reference for those prefixes:
+  `authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt.java` and
+  `authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt2y.java`.
+  Those upstream classes delegate to BouncyCastle `OpenBSDBCrypt`, which would
+  require a new Gradle dependency, so the public-domain algorithm was vendored
+  instead.
+
+Local file using the vendored source (not itself vendored):
+`src/main/java/com/hizeric/logincore/authme/AuthMePasswords.java`.
 
 When a file is vendored, retain its upstream copyright and licence headers
-verbatim and list it here with its upstream path, for example
-`authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt.java`.
+verbatim and list it here with its upstream path.
 
 Recorded: 2026-11-27.

@@ -23,8 +23,10 @@ protocol and the PacketEvents API.
 Any source vendored from AuthMeReloaded keeps its upstream copyright and licence
 headers verbatim. The root [NOTICE](./NOTICE) records the upstream repository,
 the exact commit, and every vendored file; provenance is tracked there and must
-be updated in the same change that adds a vendored file. The NOTICE currently
-lists "none yet", so no upstream source file has been committed to `src/`.
+be updated in the same change that adds a vendored file. One file is currently
+vendored: a self-contained public-domain BCrypt implementation (jBCrypt 0.4,
+Damien Miller, ISC) recorded in NOTICE, used because AuthMe's own BCrypt
+wrappers depend on BouncyCastle, which login-core does not ship.
 
 ---
 

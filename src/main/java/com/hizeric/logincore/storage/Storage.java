@@ -87,6 +87,33 @@ public final class Storage implements AutoCloseable {
                         added_by TEXT NOT NULL
                     )
                     """);
+                // AuthMe schema compatibility (upstream sql-initialize.sql:3-25). Only
+                // AUTO_INCREMENT is adapted to SQLite's AUTOINCREMENT spelling.
+                statement.executeUpdate("""
+                    CREATE TABLE IF NOT EXISTS authme (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        username VARCHAR(255) NOT NULL UNIQUE,
+                        password VARCHAR(255) NOT NULL,
+                        totp VARCHAR(16),
+                        ip VARCHAR(40),
+                        lastlogin BIGINT,
+                        regdate BIGINT NOT NULL,
+                        regip VARCHAR(40),
+                        x DOUBLE NOT NULL DEFAULT '0.0',
+                        y DOUBLE NOT NULL DEFAULT '0.0',
+                        z DOUBLE NOT NULL DEFAULT '0.0',
+                        world VARCHAR(255) NOT NULL DEFAULT 'world',
+                        yaw FLOAT,
+                        pitch FLOAT,
+                        email VARCHAR(255),
+                        isLogged INT DEFAULT '0',
+                        realname VARCHAR(255) NOT NULL DEFAULT 'Player',
+                        salt varchar(255),
+                        hasSession INT NOT NULL DEFAULT '0',
+                        premiumUUID VARCHAR(36),
+                        playerUUID VARCHAR(36)
+                    )
+                    """);
 
                 if (needsMigration) {
                     boolean autoCommit = connection.getAutoCommit();
@@ -195,6 +222,32 @@ public final class Storage implements AutoCloseable {
     /** Read-only lookup of the name linked to a premium UUID (name-keyed via links.name_lower). */
     public CompletableFuture<Optional<Link>> linkByUuid(String mojangUuid) {
         return submit(() -> findLinkByUuid(mojangUuid));
+    }
+
+    /** Reads the stored AuthMe password hash; empty when the name has no authme row. */
+    public CompletableFuture<Optional<String>> authmePassword(String name) {
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT password FROM authme WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, name);
+                try (ResultSet result = statement.executeQuery()) {
+                    return result.next() ? Optional.ofNullable(result.getString(1)) : Optional.empty();
+                }
+            }
+        });
+    }
+
+    /** Records a successful login on an existing authme row (no row is inserted). */
+    public CompletableFuture<Void> markLoggedIn(String name) {
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "UPDATE authme SET isLogged = 1, lastlogin = ? WHERE username = ? COLLATE NOCASE")) {
+                statement.setLong(1, Instant.now().toEpochMilli());
+                statement.setString(2, name);
+                statement.executeUpdate();
+                return null;
+            }
+        });
     }
 
     public CompletableFuture<ClassificationResult> setClassification(String name, String classification) {
