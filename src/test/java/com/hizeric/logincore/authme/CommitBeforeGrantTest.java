@@ -10,18 +10,24 @@ import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.BanList;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.plugin.java.JavaPlugin;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockbukkit.mockbukkit.MockBukkit;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Proxy;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -405,6 +411,87 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void defaultBanCheckRejectsIpBannedPlayerBeforeRegistration() throws Exception {
+        MockBukkit.mock();
+        try (Storage storage = new Storage(temporaryDirectory.resolve("ip-ban.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            TestPlugin plugin = mockBukkitPlugin();
+            plugin.getServer().getBanList(BanList.Type.IP)
+                .addBan("127.0.0.1", "test", (Date) null, "test");
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener =
+                new AuthMeLoginListener(plugin, authState, storage, sessions, ignored -> { });
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, event.getLoginResult(),
+                "the default production check must cover IP bans");
+            assertFalse(storage.isRegistered("Notch").get(), "an IP-banned player must not get an account");
+            assertFalse(authState.isAuthenticated("notch"));
+            assertTrue(TestPlugin.firedEvents().isEmpty());
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void defaultBanCheckRejectsUuidBannedPlayerBeforeRegistration() throws Exception {
+        MockBukkit.mock();
+        try (Storage storage = new Storage(temporaryDirectory.resolve("uuid-ban.db"))) {
+            UUID uuid = UUID.fromString(UUID_TEXT);
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            TestPlugin plugin = mockBukkitPlugin();
+            plugin.getServer().getBanList(BanList.Type.NAME)
+                .addBan(uuid.toString(), "test", (Date) null, "test");
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener =
+                new AuthMeLoginListener(plugin, authState, storage, sessions, ignored -> { });
+            AsyncPlayerPreLoginEvent event = event("Notch", uuid);
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, event.getLoginResult(),
+                "the default check must cover UUID bans");
+            assertFalse(storage.isRegistered("Notch").get(), "a UUID-banned player must not get an account");
+            assertFalse(authState.isAuthenticated("notch"));
+            assertTrue(TestPlugin.firedEvents().isEmpty());
+        } finally {
+            MockBukkit.unmock();
+        }
+    }
+
+    @Test
+    void failedGrantAfterRegistrationLeavesNoEventMarker() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("grant-throws-registration.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            List<String> registrations = new ArrayList<>();
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = new AuthMeLoginListener(plugin(), authState, storage, sessions,
+                ignored -> { }, name -> { throw new IllegalStateException("grant failed"); },
+                name -> false, (name, password) -> {
+                    registrations.add(name);
+                    return true;
+                }, (name, address) -> false, Runnable::run);
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
+            assertEquals(List.of("Notch"), registrations, "registration may commit before a later grant throws");
+            assertFalse(authState.isAuthenticated("notch"));
+
+            listener.onPlayerLogin(loginEvent());
+
+            assertTrue(TestPlugin.firedEvents().isEmpty(),
+                "a failed pre-login must leave no marker that fires RegisterEvent/LoginEvent");
+        }
+    }
+
+    @Test
     void rejectedJoinClearsPendingRegistrationIntent() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("rejected-join.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
@@ -651,8 +738,11 @@ class CommitBeforeGrantTest {
     }
 
     private static AsyncPlayerPreLoginEvent event(String name) throws Exception {
+        return event(name, UUID.randomUUID());
+    }
+
+    private static AsyncPlayerPreLoginEvent event(String name, UUID uniqueId) throws Exception {
         // Supplying a profile avoids Bukkit.createProfile(), which needs a live Server.
-        UUID uniqueId = UUID.randomUUID();
         com.destroystokyo.paper.profile.PlayerProfile profile = (com.destroystokyo.paper.profile.PlayerProfile)
             Proxy.newProxyInstance(com.destroystokyo.paper.profile.PlayerProfile.class.getClassLoader(),
                 new Class<?>[]{com.destroystokyo.paper.profile.PlayerProfile.class},
@@ -736,6 +826,16 @@ class CommitBeforeGrantTest {
         TestPlugin plugin = TestPlugin.create();
         plugin.getConfig().set("messages.account-conflict", "<red>account-conflict</red>");
         plugin.getConfig().set("messages.rename-conflict", "<red>rename-conflict</red>");
+        return plugin;
+    }
+
+    /** Same stub, with MockBukkit's server injected so the default ban check sees real ban lists. */
+    private static TestPlugin mockBukkitPlugin() throws Exception {
+        TestPlugin plugin = TestPlugin.create();
+        Field server = JavaPlugin.class.getDeclaredField("server");
+        server.setAccessible(true);
+        server.set(plugin, Bukkit.getServer());
+        plugin.getConfig().set("messages.account-conflict", "<red>account-conflict</red>");
         return plugin;
     }
 }

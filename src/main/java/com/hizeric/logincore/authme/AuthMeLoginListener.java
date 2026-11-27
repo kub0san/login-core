@@ -25,6 +25,7 @@ import java.util.Base64;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -94,9 +95,20 @@ public final class AuthMeLoginListener implements Listener {
 
     private static BiPredicate<String, InetAddress> bukkitBanCheck(Plugin plugin) {
         return (name, address) -> {
-            BanList bans = plugin.getServer().getBanList(BanList.Type.NAME);
-            return bans != null && bans.isBanned(name);
+            BanList names = plugin.getServer().getBanList(BanList.Type.NAME);
+            BanList ips = plugin.getServer().getBanList(BanList.Type.IP);
+            return (names != null && names.isBanned(name))
+                || (ips != null && address != null && ips.isBanned(address.getHostAddress()));
         };
+    }
+
+    /** UUID bans live in Bukkit's NAME ban list and cannot be passed through the name/IP seam. */
+    boolean isUuidBanned(UUID uuid) {
+        if (uuid == null) {
+            return false;
+        }
+        BanList names = plugin.getServer().getBanList(BanList.Type.NAME);
+        return names != null && names.isBanned(uuid.toString());
     }
 
     private static Consumer<Runnable> mainThreadExecutor(Plugin plugin) {
@@ -147,7 +159,7 @@ public final class AuthMeLoginListener implements Listener {
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             return;
         }
-        if (isBanned.test(event.getName(), event.getAddress())) {
+        if (isBanned.test(event.getName(), event.getAddress()) || isUuidBanned(event.getUniqueId())) {
             authState.logout(event.getName());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, "You are banned from this server.");
             return;
@@ -181,7 +193,8 @@ public final class AuthMeLoginListener implements Listener {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
                 return;
             }
-            if (session.shouldRegister()) {
+            boolean needsRegistration = session.shouldRegister();
+            if (needsRegistration) {
                 if (isRegistered.test(event.getName())) {
                     event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                         "An account with this name already exists. Please reconnect or contact an administrator.");
@@ -193,11 +206,15 @@ public final class AuthMeLoginListener implements Listener {
                     event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
                     return;
                 }
-                pendingRegistrations.add(registrationKey(event.getName(), event.getAddress()));
             }
             authState.authenticate(event.getName());
             grant.accept(event.getName());
             onVerifiedLogin.accept(session.connectionId());
+            // Mark for events only after every step succeeded, so a failure caught below cannot
+            // leave a marker that later disallows a retry as an existing account.
+            if (needsRegistration) {
+                pendingRegistrations.add(registrationKey(event.getName(), event.getAddress()));
+            }
         } catch (RuntimeException ex) {
             plugin.getLogger().severe("Login verification rejected the verified login for "
                 + event.getName() + ": " + ex.getMessage());
