@@ -10,7 +10,6 @@ import com.hizeric.logincore.config.LegacyAuthMeImport;
 import com.hizeric.logincore.handshake.LoginMetrics;
 import com.hizeric.logincore.handshake.PremiumSupport;
 import com.hizeric.logincore.handshake.PremiumSupportFactory;
-import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.mojang.LookupCache;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.mojang.RateBudget;
@@ -36,7 +35,6 @@ public final class LoginCore extends JavaPlugin {
     private PremiumSupport premiumSupport;
     private ExecutorService workers;
     private Storage storage;
-    private MigrationAudit migrationAudit;
 
     @Override
     public void onEnable() {
@@ -69,11 +67,6 @@ public final class LoginCore extends JavaPlugin {
 
         try {
             storage = new Storage(getDataFolder().toPath().resolve("authme.db"));
-            Storage.PremiumUuidImportReport importReport = storage.premiumUuidImportReport();
-            if (importReport.imported() > 0 || importReport.skipped() > 0) {
-                getLogger().info("legacy premiumUUID import: " + importReport.imported()
-                    + " imported, " + importReport.skipped() + " skipped");
-            }
             workers = new ThreadPoolExecutor(2, 4, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(256), runnable -> {
                     Thread thread = new Thread(runnable, "login-core-Worker");
@@ -104,9 +97,8 @@ public final class LoginCore extends JavaPlugin {
                     premiumSupport.release()::releaseAfterAuth);
             getServer().getPluginManager().registerEvents(authListener, this);
 
-            migrationAudit = new MigrationAudit(this, storage, mojang);
             AdminCommand adminCommand =
-                new AdminCommand(this, storage, mojang, migrationAudit, workers, loginMetrics);
+                new AdminCommand(this, storage, mojang, workers, loginMetrics);
             getCommand("logincore").setExecutor(adminCommand);
             getCommand("logincore").setTabCompleter(adminCommand);
 
@@ -165,9 +157,6 @@ public final class LoginCore extends JavaPlugin {
         // storage.close() is last because it waits for its single SQL worker to finish first.
         if (premiumSupport != null) {
             premiumSupport.shutdown();
-        }
-        if (migrationAudit != null) {
-            migrationAudit.close();
         }
         if (workers != null) {
             workers.shutdownNow();

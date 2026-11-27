@@ -14,12 +14,9 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -37,7 +34,6 @@ public final class Storage implements AutoCloseable {
     });
     private final Path databasePath;
     private Connection connection;
-    private PremiumUuidImportReport premiumUuidImportReport = new PremiumUuidImportReport(0, 0);
 
     public Storage(Path databasePath) throws SQLException, IOException {
         this.databasePath = databasePath.toAbsolutePath();
@@ -172,7 +168,6 @@ public final class Storage implements AutoCloseable {
                                 SELECT RAISE(ABORT, 'classification is immutable');
                             END
                             """);
-                        premiumUuidImportReport = importPremiumUuids();
                         // Exemptions are never re-imported: classification is the only identity signal.
                         statement.executeUpdate("DROP TABLE IF EXISTS exempt");
                         // Stamped last, inside the same transaction, so a partial migration is never marked done.
@@ -403,49 +398,6 @@ public final class Storage implements AutoCloseable {
         return submit(() -> Optional.ofNullable(storedClassification(normalizedName)));
     }
 
-    /**
-     * Classifies legacy accounts once from the evidence already in SQLite: a link with a premium
-     * UUID is strong PREMIUM evidence; a name without one stays UNCLASSIFIED (ADR 0004).
-     */
-    public CompletableFuture<MigrationReport> migrateLegacyClassification() {
-        return submit(() -> {
-            List<String> linkedNames = new ArrayList<>();
-            try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT name_lower FROM links WHERE mojang_uuid IS NOT NULL ORDER BY name_lower");
-                 ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    linkedNames.add(result.getString(1));
-                }
-            }
-            Path backup = null;
-            if (!linkedNames.isEmpty() || countRows("account_classification") > 0) {
-                backup = backupDatabase();
-            }
-
-            int classified = 0;
-            int already = 0;
-            boolean autoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                for (String name : linkedNames) {
-                    // Never OFFLINE: a missing premium UUID is not evidence of an offline account.
-                    if (applyClassification(name, "PREMIUM") == ClassificationResult.SET) {
-                        classified++;
-                    } else {
-                        already++;
-                    }
-                }
-                connection.commit();
-            } catch (SQLException | RuntimeException ex) {
-                connection.rollback();
-                throw ex;
-            } finally {
-                connection.setAutoCommit(autoCommit);
-            }
-            return new MigrationReport(classified, already, backup);
-        });
-    }
-
     private Path backupDatabase() throws SQLException {
         // WAL holds the most recent commits; checkpoint so the copied file stands alone.
         try (Statement statement = connection.createStatement()) {
@@ -469,83 +421,6 @@ public final class Storage implements AutoCloseable {
         try (ResultSet result = statement.executeQuery("PRAGMA user_version")) {
             return result.next() ? result.getInt(1) : 0;
         }
-    }
-
-    /**
-     * Imports legacy AuthMe premium identities once, inside the migration transaction. Malformed
-     * rows and rows that conflict with a stored name or UUID are skipped, never overwritten.
-     */
-    private PremiumUuidImportReport importPremiumUuids() throws SQLException {
-        Map<String, String> uuidByName = new HashMap<>();
-        Map<String, String> nameByUuid = new HashMap<>();
-        try (PreparedStatement statement = connection.prepareStatement(
-                 "SELECT name_lower, mojang_uuid FROM links");
-             ResultSet result = statement.executeQuery()) {
-            while (result.next()) {
-                String name = lower(result.getString(1));
-                String uuid = lower(result.getString(2));
-                uuidByName.put(name, uuid);
-                nameByUuid.put(uuid, name);
-            }
-        }
-
-        int imported = 0;
-        int skipped = 0;
-        try (PreparedStatement statement = connection.prepareStatement(
-                 "SELECT username, premiumUUID FROM authme "
-                     + "WHERE premiumUUID IS NOT NULL AND TRIM(premiumUUID) <> ''");
-             ResultSet result = statement.executeQuery()) {
-            while (result.next()) {
-                String name = lower(result.getString(1));
-                UUID parsed;
-                try {
-                    parsed = UUID.fromString(result.getString(2).trim());
-                } catch (IllegalArgumentException | NullPointerException ex) {
-                    skipped++;
-                    continue;
-                }
-                String uuid = lower(parsed.toString());
-                String classification = storedClassification(name);
-                if (name.isBlank()
-                    || (classification != null && !"PREMIUM".equals(classification))
-                    || !freeOrSame(nameByUuid.get(uuid), name)
-                    || !freeOrSame(uuidByName.get(name), uuid)) {
-                    skipped++;
-                    continue;
-                }
-                insertClassification(name, "PREMIUM");
-                insertImportedLink(name, uuid, result.getString(1));
-                uuidByName.put(name, uuid);
-                nameByUuid.put(uuid, name);
-                imported++;
-            }
-        }
-        return new PremiumUuidImportReport(imported, skipped);
-    }
-
-    private void insertImportedLink(String normalizedName, String uuid, String canonicalName)
-        throws SQLException {
-        long now = Instant.now().toEpochMilli();
-        try (PreparedStatement statement = connection.prepareStatement("""
-            INSERT INTO links (name_lower, mojang_uuid, canonical_name, linked_at, last_verified_at, source)
-            VALUES (?, ?, ?, ?, ?, 'AUTHME_IMPORT')
-            ON CONFLICT(name_lower) DO NOTHING
-            """)) {
-            statement.setString(1, normalizedName);
-            statement.setString(2, uuid);
-            statement.setString(3, canonicalName);
-            statement.setLong(4, now);
-            statement.setLong(5, now);
-            statement.executeUpdate();
-        }
-    }
-
-    private static boolean freeOrSame(String existing, String value) {
-        return existing == null || existing.equals(value);
-    }
-
-    private static String lower(String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -607,10 +482,6 @@ public final class Storage implements AutoCloseable {
 
     public CompletableFuture<Summary> summary() {
         return submit(() -> new Summary(countRows("links"), countRows("account_classification")));
-    }
-
-    public PremiumUuidImportReport premiumUuidImportReport() {
-        return premiumUuidImportReport;
     }
 
     private int countRows(String table) throws SQLException {
@@ -766,12 +637,6 @@ public final class Storage implements AutoCloseable {
     }
 
     public record Summary(int links, int classifications) {
-    }
-
-    public record MigrationReport(int classifiedPremium, int alreadyClassified, Path backupPath) {
-    }
-
-    public record PremiumUuidImportReport(int imported, int skipped) {
     }
 
     public enum ClassificationResult { SET, ALREADY_SAME, ALREADY_DIFFERENT }

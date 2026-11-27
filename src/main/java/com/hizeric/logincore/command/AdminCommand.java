@@ -1,7 +1,6 @@
 package com.hizeric.logincore.command;
 
 import com.hizeric.logincore.handshake.LoginMetrics;
-import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.storage.Storage;
 import org.bukkit.Bukkit;
@@ -24,22 +23,19 @@ import java.util.concurrent.ExecutorService;
 
 public final class AdminCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> ROOT_ARGUMENTS = List.of("status", "migrate");
-    private static final List<String> MIGRATION_ARGUMENTS = List.of("audit", "classify");
+    private static final List<String> ROOT_ARGUMENTS = List.of("status");
 
     private final JavaPlugin plugin;
     private final Storage storage;
     private final MojangClient mojang;
-    private final MigrationAudit migrationAudit;
     private final ExecutorService workers;
     private final LoginMetrics loginMetrics;
 
     public AdminCommand(JavaPlugin plugin, Storage storage, MojangClient mojang,
-                        MigrationAudit migrationAudit, ExecutorService workers, LoginMetrics loginMetrics) {
+                        ExecutorService workers, LoginMetrics loginMetrics) {
         this.plugin = plugin;
         this.storage = storage;
         this.mojang = mojang;
-        this.migrationAudit = migrationAudit;
         this.workers = workers;
         this.loginMetrics = loginMetrics;
     }
@@ -60,10 +56,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
             }
             return true;
         }
-        switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "migrate" -> handleMigrate(sender, args);
-            default -> usage(sender);
-        }
+        usage(sender);
         return true;
     }
 
@@ -78,7 +71,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             return switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "status" -> matching(knownPlayerNames(), args[1]);
-                case "migrate" -> matching(MIGRATION_ARGUMENTS, args[1]);
                 default -> List.of();
             };
         }
@@ -155,34 +147,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
             + ", classification: " + classification.orElse("UNCLASSIFIED");
     }
 
-    private void handleMigrate(CommandSender sender, String[] args) {
-        if (args.length == 2 && "classify".equalsIgnoreCase(args[1])) {
-            storage.migrateLegacyClassification().whenComplete((report, error) -> onMain(sender, () -> {
-                if (error != null) {
-                    reportError(sender, error);
-                    return;
-                }
-                sender.sendMessage(ChatColor.GREEN + "Legacy classification: classified " + report.classifiedPremium()
-                    + " PREMIUM, already classified " + report.alreadyClassified() + ".");
-                sender.sendMessage(ChatColor.GRAY + "Backup: "
-                    + (report.backupPath() == null ? "none (empty database)" : report.backupPath()));
-            }));
-            return;
-        }
-        if (args.length == 2 && "audit".equalsIgnoreCase(args[1])) {
-            sender.sendMessage(ChatColor.YELLOW + "Migration audit started. This may take about one second per registered account.");
-            migrationAudit.startAudit().whenComplete((path, error) -> onMain(sender, () -> {
-                if (error != null) {
-                    reportError(sender, error);
-                } else {
-                    sender.sendMessage(ChatColor.GREEN + "Migration audit saved to " + path + ".");
-                }
-            }));
-            return;
-        }
-        usage(sender);
-    }
-
     private void onMain(CommandSender sender, Runnable action) {
         if (!plugin.isEnabled()) {
             return;
@@ -204,6 +168,5 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
 
     private void usage(CommandSender sender) {
         sender.sendMessage(ChatColor.YELLOW + "/logincore status [name]");
-        sender.sendMessage(ChatColor.YELLOW + "/logincore migrate audit | migrate classify");
     }
 }

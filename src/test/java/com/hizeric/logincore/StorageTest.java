@@ -23,8 +23,6 @@ import java.util.concurrent.CompletionException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -374,90 +372,6 @@ class StorageTest {
             assertEquals("notch", found.name());
             assertEquals(UUID, found.mojangUuid());
             assertEquals(1, storage.summary().get().links());
-        }
-    }
-
-    @Test
-    void legacyPremiumLinkIsClassifiedPremium() throws Exception {
-        Path database = temporaryDirectory.resolve("migration-premium.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-
-            Storage.MigrationReport report = storage.migrateLegacyClassification().get();
-
-            assertEquals(1, report.classifiedPremium());
-            assertEquals(0, report.alreadyClassified());
-            assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
-        }
-    }
-
-    @Test
-    void legacyAccountWithoutLinkStaysUnclassified() throws Exception {
-        Path database = temporaryDirectory.resolve("migration-unclassified.db");
-        try (Storage storage = new Storage(database); Connection connection = open(database)) {
-            storage.registerPlayer("LegacyGuy", "password").get();
-
-            Storage.MigrationReport report = storage.migrateLegacyClassification().get();
-
-            assertEquals(0, report.classifiedPremium());
-            assertEquals(0, report.alreadyClassified());
-            assertTrue(storage.classification("legacyguy").get().isEmpty());
-            assertNull(classification(connection, "legacyguy"));
-        }
-    }
-
-    @Test
-    void migrationIsIdempotent() throws Exception {
-        Path database = temporaryDirectory.resolve("migration-idempotent.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-
-            Storage.MigrationReport first = storage.migrateLegacyClassification().get();
-            Storage.MigrationReport second = storage.migrateLegacyClassification().get();
-
-            assertEquals(1, first.classifiedPremium());
-            assertEquals(0, second.classifiedPremium());
-            assertEquals(1, second.alreadyClassified());
-            assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
-        }
-    }
-
-    @Test
-    void migrationWritesABackup() throws Exception {
-        Path database = temporaryDirectory.resolve("migration-backup.db");
-        try (Storage storage = new Storage(database)) {
-            storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-
-            Storage.MigrationReport report = storage.migrateLegacyClassification().get();
-
-            assertNotNull(report.backupPath());
-            assertTrue(Files.isRegularFile(report.backupPath()));
-            assertTrue(report.backupPath().getFileName().toString().matches("migration-backup\\.db\\.bak-\\d{8}-\\d{6}"));
-            try (Connection backup = open(report.backupPath());
-                 Statement statement = backup.createStatement();
-                 ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM account_classification")) {
-                assertTrue(result.next());
-                assertEquals(0, result.getInt(1), "backup is taken before the migration writes");
-            }
-        }
-    }
-
-    @Test
-    void migrationNeverWritesOffline() throws Exception {
-        Path database = temporaryDirectory.resolve("migration-no-offline.db");
-        try (Storage storage = new Storage(database);
-             Connection connection = open(database);
-             Statement statement = connection.createStatement()) {
-            storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-            storage.registerPlayer("LegacyGuy", "password").get();
-
-            storage.migrateLegacyClassification().get();
-
-            try (ResultSet result = statement.executeQuery(
-                "SELECT COUNT(*) FROM account_classification WHERE classification = 'OFFLINE'")) {
-                assertTrue(result.next());
-                assertEquals(0, result.getInt(1));
-            }
         }
     }
 
