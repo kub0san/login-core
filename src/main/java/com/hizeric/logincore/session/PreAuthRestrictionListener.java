@@ -5,15 +5,20 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.event.Cancellable;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.inventory.InventoryOpenEvent;
 import org.bukkit.event.player.AsyncPlayerChatEvent;
+import org.bukkit.event.player.PlayerAttemptPickupItemEvent;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -22,6 +27,8 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.event.player.PlayerSwapHandItemsEvent;
+import org.bukkit.event.vehicle.VehicleEnterEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
 
@@ -131,6 +138,14 @@ public final class PreAuthRestrictionListener implements Listener {
         return !authState.isAuthenticated(key) && !premiumNames.contains(key);
     }
 
+    boolean cancelIfRestricted(Player player, Cancellable event) {
+        if (player == null || !shouldRestrict(player.getName())) {
+            return false;
+        }
+        event.setCancelled(true);
+        return true;
+    }
+
     boolean hasPendingLogin(String name) {
         return name != null && joinedAt.containsKey(normalize(name));
     }
@@ -191,92 +206,123 @@ public final class PreAuthRestrictionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onChat(AsyncPlayerChatEvent event) {
-        if (shouldRestrict(event.getPlayer().getName())) {
-            event.setCancelled(true);
+        if (cancelIfRestricted(event.getPlayer(), event)) {
             event.getPlayer().sendMessage(COMMAND_DENIED);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        if (shouldRestrict(event.getPlayer().getName()) && !isCommandAllowed(event.getMessage())) {
-            event.setCancelled(true);
+        if (isCommandAllowed(event.getMessage())) {
+            return;
+        }
+        if (cancelIfRestricted(event.getPlayer(), event)) {
             event.getPlayer().sendMessage(COMMAND_DENIED);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!shouldRestrict(event.getPlayer().getName())) {
+        Player player = event.getPlayer();
+        if (!cancelIfRestricted(player, event)) {
             return;
         }
-        event.setCancelled(true);
         // Movement fires every tick; warn once per join rather than flooding chat.
-        if (moveWarned.add(normalize(event.getPlayer().getName()))) {
-            event.getPlayer().sendMessage(MOVE_DENIED);
+        if (moveWarned.add(normalize(player.getName()))) {
+            player.sendMessage(MOVE_DENIED);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
-        if (event.getWhoClicked() instanceof Player player && shouldRestrict(player.getName())) {
-            event.setCancelled(true);
+        if (event.getWhoClicked() instanceof Player player) {
+            cancelIfRestricted(player, event);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInventoryDrag(InventoryDragEvent event) {
-        if (event.getWhoClicked() instanceof Player player && shouldRestrict(player.getName())) {
-            event.setCancelled(true);
+        if (event.getWhoClicked() instanceof Player player) {
+            cancelIfRestricted(player, event);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInventoryOpen(InventoryOpenEvent event) {
-        if (event.getPlayer() instanceof Player player && shouldRestrict(player.getName())) {
-            event.setCancelled(true);
+        if (event.getPlayer() instanceof Player player) {
+            cancelIfRestricted(player, event);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInteract(PlayerInteractEvent event) {
-        if (shouldRestrict(event.getPlayer().getName())) {
-            event.setCancelled(true);
-        }
+        cancelIfRestricted(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onInteractEntity(PlayerInteractEntityEvent event) {
-        if (shouldRestrict(event.getPlayer().getName())) {
-            event.setCancelled(true);
-        }
+        cancelIfRestricted(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onEntityDamage(EntityDamageEvent event) {
-        if (event.getEntity() instanceof Player player && shouldRestrict(player.getName())) {
-            event.setCancelled(true);
+        if (event.getEntity() instanceof Player player) {
+            cancelIfRestricted(player, event);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onEntityDamageByEntity(EntityDamageByEntityEvent event) {
-        if (event.getDamager() instanceof Player player && shouldRestrict(player.getName())) {
-            event.setCancelled(true);
+        if (event.getDamager() instanceof Player player) {
+            cancelIfRestricted(player, event);
         }
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onDropItem(PlayerDropItemEvent event) {
-        if (shouldRestrict(event.getPlayer().getName())) {
-            event.setCancelled(true);
-        }
+        cancelIfRestricted(event.getPlayer(), event);
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onPickupItem(PlayerPickupItemEvent event) {
-        if (shouldRestrict(event.getPlayer().getName())) {
-            event.setCancelled(true);
+        cancelIfRestricted(event.getPlayer(), event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        cancelIfRestricted(event.getPlayer(), event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        cancelIfRestricted(event.getPlayer(), event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onSwapHandItems(PlayerSwapHandItemsEvent event) {
+        cancelIfRestricted(event.getPlayer(), event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onVehicleEnter(VehicleEnterEvent event) {
+        if (event.getEntered() instanceof Player player) {
+            cancelIfRestricted(player, event);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onAttemptPickupItem(PlayerAttemptPickupItemEvent event) {
+        cancelIfRestricted(event.getPlayer(), event);
+    }
+
+    @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
+    public void onProjectileDamage(EntityDamageByEntityEvent event) {
+        if (event.getDamager() instanceof Player player && cancelIfRestricted(player, event)) {
+            return;
+        }
+        if (event.getDamager() instanceof Projectile projectile
+            && projectile.getShooter() instanceof Player shooter) {
+            cancelIfRestricted(shooter, event);
         }
     }
 

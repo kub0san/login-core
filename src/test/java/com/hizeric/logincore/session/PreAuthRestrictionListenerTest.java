@@ -5,17 +5,27 @@ import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
+import org.bukkit.event.Cancellable;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
+import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -138,6 +148,82 @@ class PreAuthRestrictionListenerTest {
         assertTrue(listener.shouldRestrict("PremiumGuy"));
     }
 
+    @Test
+    void cancelIfRestrictedCancelsOnlyRestrictedPlayers() {
+        Player restricted = player("RestrictedGuy");
+        state.authenticate("AuthGuy");
+        Player authenticated = player("AuthGuy");
+        RecordingCancellable restrictedEvent = new RecordingCancellable();
+        RecordingCancellable authenticatedEvent = new RecordingCancellable();
+        RecordingCancellable noPlayerEvent = new RecordingCancellable();
+
+        assertTrue(listener.cancelIfRestricted(restricted, restrictedEvent));
+        assertTrue(restrictedEvent.isCancelled());
+
+        assertFalse(listener.cancelIfRestricted(authenticated, authenticatedEvent));
+        assertFalse(authenticatedEvent.isCancelled());
+
+        assertFalse(listener.cancelIfRestricted(null, noPlayerEvent));
+        assertFalse(noPlayerEvent.isCancelled());
+    }
+
+    @Test
+    void allPreAuthHandlersAreRegistered() {
+        Set<String> required = Set.of("onBlockBreak", "onBlockPlace", "onSwapHandItems",
+            "onVehicleEnter", "onAttemptPickupItem", "onProjectileDamage");
+        Set<String> found = new HashSet<>();
+        for (Method method : PreAuthRestrictionListener.class.getDeclaredMethods()) {
+            EventHandler annotation = method.getAnnotation(EventHandler.class);
+            if (annotation == null || !required.contains(method.getName())) {
+                continue;
+            }
+            found.add(method.getName());
+            assertEquals(EventPriority.LOWEST, annotation.priority(), method.getName());
+            assertTrue(annotation.ignoreCancelled(), method.getName());
+        }
+        assertEquals(required, found);
+    }
+
+    @Test
+    void projectileShotByRestrictedPlayerIsCancelled() {
+        Player shooter = player("RestrictedShooter");
+        Player victim = player("Victim");
+        state.authenticate("victim");
+        Projectile projectile = projectile(shooter);
+        // The 4-arg overload builds a DamageSource via Bukkit.getUnsafe(), which is unset in unit tests.
+        EntityDamageByEntityEvent event =
+            new EntityDamageByEntityEvent(projectile, victim, DamageCause.PROJECTILE, null, 1.0D);
+
+        listener.onProjectileDamage(event);
+
+        assertTrue(event.isCancelled());
+    }
+
+    private static final class RecordingCancellable implements Cancellable {
+        private boolean cancelled;
+
+        @Override
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        @Override
+        public void setCancelled(boolean cancel) {
+            cancelled = cancel;
+        }
+    }
+
+    private static Projectile projectile(Player shooter) {
+        return (Projectile) Proxy.newProxyInstance(Projectile.class.getClassLoader(), new Class<?>[]{Projectile.class},
+            (self, method, args) -> switch (method.getName()) {
+                case "getShooter" -> shooter;
+                case "equals" -> self == args[0];
+                case "hashCode" -> System.identityHashCode(self);
+                case "toString" -> "Projectile[" + shooter + "]";
+                default -> defaultValue(method.getReturnType());
+            });
+    }
+
     private static String kickText(Object value) {
         if (value instanceof Component component) {
             return PlainTextComponentSerializer.plainText().serialize(component);
@@ -170,34 +256,35 @@ class PreAuthRestrictionListenerTest {
                 case "equals" -> self == args[0];
                 case "hashCode" -> System.identityHashCode(self);
                 case "toString" -> "Player[" + name + "]";
-                default -> {
-                    Class<?> type = method.getReturnType();
-                    if (!type.isPrimitive()) {
-                        yield null;
-                    }
-                    if (type == boolean.class) {
-                        yield false;
-                    }
-                    if (type == char.class) {
-                        yield '\0';
-                    }
-                    if (type == byte.class) {
-                        yield (byte) 0;
-                    }
-                    if (type == short.class) {
-                        yield (short) 0;
-                    }
-                    if (type == int.class) {
-                        yield 0;
-                    }
-                    if (type == long.class) {
-                        yield 0L;
-                    }
-                    if (type == float.class) {
-                        yield 0f;
-                    }
-                    yield 0d;
-                }
+                default -> defaultValue(method.getReturnType());
             });
+    }
+
+    private static Object defaultValue(Class<?> type) {
+        if (!type.isPrimitive()) {
+            return null;
+        }
+        if (type == boolean.class) {
+            return false;
+        }
+        if (type == char.class) {
+            return '\0';
+        }
+        if (type == byte.class) {
+            return (byte) 0;
+        }
+        if (type == short.class) {
+            return (short) 0;
+        }
+        if (type == int.class) {
+            return 0;
+        }
+        if (type == long.class) {
+            return 0L;
+        }
+        if (type == float.class) {
+            return 0f;
+        }
+        return 0d;
     }
 }
