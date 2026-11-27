@@ -161,6 +161,174 @@ class AuthMeCompatTest {
         }
     }
 
+    @Test
+    void startupImportsPremiumUuidAsPremium() throws Exception {
+        Path database = temporaryDirectory.resolve("premium-import.db");
+        String premiumUuid = "11223344-5566-7788-99aa-bbccddeeff00";
+        try (Connection connection = open(database)) {
+            createAuthMeSchema(connection);
+            try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO authme (username, password, regdate, premiumUUID) VALUES (?, ?, 0, ?)")) {
+                insert.setString(1, "Legacy");
+                insert.setString(2, BCRYPT_A);
+                insert.setString(3, premiumUuid);
+                insert.executeUpdate();
+            }
+        }
+
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertEquals("PREMIUM", storage.classification("legacy").get().orElseThrow());
+            try (Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery(
+                     "SELECT mojang_uuid FROM links WHERE name_lower = 'legacy'")) {
+                assertTrue(result.next());
+                assertEquals(premiumUuid, result.getString(1));
+            }
+            assertEquals(1, storage.premiumUuidImportReport().imported());
+            assertEquals(0, storage.premiumUuidImportReport().skipped());
+        }
+    }
+
+    @Test
+    void premiumUuidConflictIsSkippedAndReported() throws Exception {
+        Path database = temporaryDirectory.resolve("premium-conflict.db");
+        String heldUuid = "11223344-5566-7788-99aa-bbccddeeff00";
+        String freeUuid = "aabbccdd-eeff-0011-2233-445566778899";
+        try (Connection connection = open(database)) {
+            createAuthMeSchema(connection);
+            try (PreparedStatement insert = connection.prepareStatement("""
+                INSERT INTO links (name_lower, mojang_uuid, canonical_name, linked_at, last_verified_at, source)
+                VALUES (?, ?, ?, 0, 0, 'TEST')
+                """)) {
+                insert.setString(1, "holder");
+                insert.setString(2, heldUuid);
+                insert.setString(3, "Holder");
+                insert.executeUpdate();
+            }
+            try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO authme (username, password, regdate, premiumUUID) VALUES (?, ?, 0, ?)")) {
+                insert.setString(1, "Good");
+                insert.setString(2, BCRYPT_A);
+                insert.setString(3, freeUuid);
+                insert.executeUpdate();
+                insert.setString(1, "Bad");
+                insert.setString(3, heldUuid);
+                insert.executeUpdate();
+            }
+        }
+
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertEquals(1, storage.premiumUuidImportReport().imported());
+            assertEquals(1, storage.premiumUuidImportReport().skipped());
+            assertEquals("PREMIUM", storage.classification("good").get().orElseThrow());
+            assertTrue(storage.classification("bad").get().isEmpty());
+            try (Statement statement = connection.createStatement();
+                 ResultSet result = statement.executeQuery(
+                     "SELECT name_lower FROM links WHERE mojang_uuid = '" + heldUuid + "'")) {
+                assertTrue(result.next());
+                assertEquals("holder", result.getString(1), "the existing link must not be overwritten");
+            }
+        }
+    }
+
+    @Test
+    void malformedPremiumUuidIsSkipped() throws Exception {
+        Path database = temporaryDirectory.resolve("premium-malformed.db");
+        try (Connection connection = open(database)) {
+            createAuthMeSchema(connection);
+            try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO authme (username, password, regdate, premiumUUID) VALUES (?, ?, 0, ?)")) {
+                insert.setString(1, "Broken");
+                insert.setString(2, BCRYPT_A);
+                insert.setString(3, "not-a-uuid");
+                insert.executeUpdate();
+            }
+        }
+
+        try (Storage storage = new Storage(database)) {
+            assertEquals(0, storage.premiumUuidImportReport().imported());
+            assertEquals(1, storage.premiumUuidImportReport().skipped());
+            assertTrue(storage.classification("broken").get().isEmpty());
+            assertTrue(storage.link("broken").get().isEmpty());
+        }
+    }
+
+    @Test
+    void existingClassificationIsNotOverwritten() throws Exception {
+        Path database = temporaryDirectory.resolve("premium-classification.db");
+        String premiumUuid = "11223344-5566-7788-99aa-bbccddeeff00";
+        try (Connection connection = open(database)) {
+            createAuthMeSchema(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                    CREATE TABLE account_classification (
+                        name_lower TEXT PRIMARY KEY,
+                        classification TEXT NOT NULL CHECK (classification IN ('PREMIUM','OFFLINE')),
+                        set_at INTEGER NOT NULL
+                    )
+                    """);
+                statement.executeUpdate("""
+                    INSERT INTO account_classification (name_lower, classification, set_at)
+                    VALUES ('legacy', 'OFFLINE', 0)
+                    """);
+            }
+            try (PreparedStatement insert = connection.prepareStatement(
+                "INSERT INTO authme (username, password, regdate, premiumUUID) VALUES (?, ?, 0, ?)")) {
+                insert.setString(1, "Legacy");
+                insert.setString(2, BCRYPT_A);
+                insert.setString(3, premiumUuid);
+                insert.executeUpdate();
+            }
+        }
+
+        try (Storage storage = new Storage(database)) {
+            assertEquals("OFFLINE", storage.classification("legacy").get().orElseThrow());
+            assertTrue(storage.link("legacy").get().isEmpty());
+            assertEquals(0, storage.premiumUuidImportReport().imported());
+            assertEquals(1, storage.premiumUuidImportReport().skipped());
+        }
+    }
+
+    private static void createAuthMeSchema(Connection connection) throws Exception {
+        try (Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                CREATE TABLE authme (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username VARCHAR(255) NOT NULL UNIQUE,
+                    password VARCHAR(255) NOT NULL,
+                    totp VARCHAR(16),
+                    ip VARCHAR(40),
+                    lastlogin BIGINT,
+                    regdate BIGINT NOT NULL,
+                    regip VARCHAR(40),
+                    x DOUBLE NOT NULL DEFAULT '0.0',
+                    y DOUBLE NOT NULL DEFAULT '0.0',
+                    z DOUBLE NOT NULL DEFAULT '0.0',
+                    world VARCHAR(255) NOT NULL DEFAULT 'world',
+                    yaw FLOAT,
+                    pitch FLOAT,
+                    email VARCHAR(255),
+                    isLogged INT DEFAULT '0',
+                    realname VARCHAR(255) NOT NULL DEFAULT 'Player',
+                    salt varchar(255),
+                    hasSession INT NOT NULL DEFAULT '0',
+                    premiumUUID VARCHAR(36),
+                    playerUUID VARCHAR(36)
+                )
+                """);
+            statement.executeUpdate("""
+                CREATE TABLE links (
+                    name_lower TEXT PRIMARY KEY,
+                    mojang_uuid TEXT NOT NULL,
+                    canonical_name TEXT,
+                    linked_at INTEGER NOT NULL,
+                    last_verified_at INTEGER NOT NULL,
+                    source TEXT NOT NULL
+                )
+                """);
+        }
+    }
+
     private static Connection open(Path database) throws Exception {
         Class.forName("org.sqlite.JDBC");
         return DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath());

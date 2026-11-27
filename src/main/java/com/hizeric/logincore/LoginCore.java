@@ -59,6 +59,11 @@ public final class LoginCore extends JavaPlugin {
 
         try {
             storage = new Storage(getDataFolder().toPath().resolve("authme.db"));
+            Storage.PremiumUuidImportReport importReport = storage.premiumUuidImportReport();
+            if (importReport.imported() > 0 || importReport.skipped() > 0) {
+                getLogger().info("legacy premiumUUID import: " + importReport.imported()
+                    + " imported, " + importReport.skipped() + " skipped");
+            }
             workers = new ThreadPoolExecutor(2, 4, 30, TimeUnit.SECONDS,
                 new ArrayBlockingQueue<>(256), runnable -> {
                     Thread thread = new Thread(runnable, "login-core-Worker");
