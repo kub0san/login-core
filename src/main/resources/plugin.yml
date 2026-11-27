@@ -5,7 +5,7 @@ description: Securely verifies Mojang account ownership and automates AuthMe log
 authors: [hizeric]
 api-version: '1.21.11'
 load: POSTWORLD
-depend: [packetevents]
+softdepend: [packetevents]
 libraries:
   - org.xerial:sqlite-jdbc:3.50.3.0
 commands:

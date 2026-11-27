@@ -1,15 +1,13 @@
 package com.hizeric.logincore;
 
-import com.github.retrooper.packetevents.PacketEvents;
-import com.github.retrooper.packetevents.event.PacketListenerCommon;
 import com.hizeric.logincore.authme.AuthMeLoginListener;
 import com.hizeric.logincore.command.AdminCommand;
 import com.hizeric.logincore.command.ChangepasswordCommand;
 import com.hizeric.logincore.command.LoginCommand;
 import com.hizeric.logincore.command.RegisterCommand;
-import com.hizeric.logincore.handshake.EncryptionKeys;
 import com.hizeric.logincore.handshake.LoginMetrics;
-import com.hizeric.logincore.handshake.PremiumLoginListener;
+import com.hizeric.logincore.handshake.PremiumSupport;
+import com.hizeric.logincore.handshake.PremiumSupportFactory;
 import com.hizeric.logincore.migration.MigrationAudit;
 import com.hizeric.logincore.mojang.LookupCache;
 import com.hizeric.logincore.mojang.MojangClient;
@@ -31,8 +29,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class LoginCore extends JavaPlugin {
 
-    private PacketListenerCommon packetListener;
-    private PremiumLoginListener loginListener;
+    private PremiumSupport premiumSupport;
     private ExecutorService workers;
     private Storage storage;
     private MigrationAudit migrationAudit;
@@ -54,11 +51,6 @@ public final class LoginCore extends JavaPlugin {
                 getLogger().warning("LuckPerms stores permissions per UUID: grant premium players their groups "
                     + "under their Mojang UUID, or set use-premium-uuid: false to keep offline UUIDs.");
             }
-        }
-        if (!PacketEvents.getAPI().isInitialized()) {
-            getLogger().severe("PacketEvents is not initialized; disabling login-core.");
-            getServer().getPluginManager().disablePlugin(this);
-            return;
         }
         if (!validConfiguration()) {
             getServer().getPluginManager().disablePlugin(this);
@@ -89,15 +81,12 @@ public final class LoginCore extends JavaPlugin {
                     Duration.ofMinutes(1)
                 )
             );
-            EncryptionKeys encryptionKeys = new EncryptionKeys();
             LoginMetrics loginMetrics = new LoginMetrics();
-            loginListener = new PremiumLoginListener(
-                this, storage, verifiedSessions, mojang, workers, encryptionKeys, loginMetrics);
-            packetListener = PacketEvents.getAPI().getEventManager().registerListener(loginListener);
-            getServer().getPluginManager().registerEvents(loginListener, this);
+            premiumSupport = PremiumSupportFactory.create(this, storage, verifiedSessions, mojang, workers, loginMetrics);
+            premiumSupport.registerBukkitEvents();
             AuthMeLoginListener authListener =
                 new AuthMeLoginListener(this, authState, storage, verifiedSessions,
-                    loginListener::releaseAfterAuth);
+                    premiumSupport.release()::releaseAfterAuth);
             getServer().getPluginManager().registerEvents(authListener, this);
 
             migrationAudit = new MigrationAudit(this, storage, mojang);
@@ -119,7 +108,7 @@ public final class LoginCore extends JavaPlugin {
             getServer().getPluginManager().registerEvents(
                 new PreAuthRestrictionListener(this, authState, storage, workers), this);
             getLogger().info("login-core login verification is active in " + getConfig().getString("mode") + " mode.");
-        } catch (SQLException | IOException | java.security.GeneralSecurityException ex) {
+        } catch (SQLException | IOException ex) {
             getLogger().severe("login-core could not initialize required storage or encryption: " + ex.getMessage());
             getServer().getPluginManager().disablePlugin(this);
         } catch (RuntimeException ex) {
@@ -132,11 +121,8 @@ public final class LoginCore extends JavaPlugin {
     public void onDisable() {
         // Order is a shutdown drain: connection cleanup finishes before workers stop, and
         // storage.close() is last because it waits for its single SQL worker to finish first.
-        if (packetListener != null && PacketEvents.getAPI() != null) {
-            PacketEvents.getAPI().getEventManager().unregisterListener(packetListener);
-        }
-        if (loginListener != null) {
-            loginListener.shutdown();
+        if (premiumSupport != null) {
+            premiumSupport.shutdown();
         }
         if (migrationAudit != null) {
             migrationAudit.close();
