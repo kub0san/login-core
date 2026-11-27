@@ -31,7 +31,6 @@ public final class LoginDecisionEngine {
 
     public record DecisionInput(
         String username,
-        boolean exempt,
         boolean validName,
         LookupResult lookupResult,
         boolean hasLink,
@@ -39,7 +38,6 @@ public final class LoginDecisionEngine {
         UUID uuidHint,
         boolean handshakeSuccess,
         boolean shadowMode,
-        boolean allowLookupFailure,
         String storedClassification
     ) {
     }
@@ -53,10 +51,6 @@ public final class LoginDecisionEngine {
         }
 
         if (!input.validName()) {
-            return Decision.PASS_THROUGH;
-        }
-        // An exemption never overrides an authoritative PREMIUM classification.
-        if (input.exempt() && !"PREMIUM".equals(input.storedClassification())) {
             return Decision.PASS_THROUGH;
         }
         // OFFLINE cannot become PREMIUM, even if a handshake somehow succeeded.
@@ -81,7 +75,7 @@ public final class LoginDecisionEngine {
             return Decision.HANDSHAKE_REQUIRED;
         }
         if (input.lookupResult() != null && input.lookupResult().isUnknown() && !input.hasLink()) {
-            return input.allowLookupFailure() ? Decision.PASS_THROUGH : Decision.KICK_VERIFY_FAILED;
+            return Decision.KICK_VERIFY_FAILED;
         }
         if (input.lookupResult() != null && input.lookupResult().isPremium()) {
             if (input.uuidHint() != null && !input.uuidHint().equals(input.lookupResult().mojangUuid())) {

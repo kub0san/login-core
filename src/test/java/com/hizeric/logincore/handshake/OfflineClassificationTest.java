@@ -105,8 +105,8 @@ class OfflineClassificationTest {
             assertFalse(lookup.isPremium());
 
             LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(
-                new LoginDecisionEngine.DecisionInput("OfflineGuy", false, true, lookup,
-                    false, null, null, false, false, false, null));
+                new LoginDecisionEngine.DecisionInput("OfflineGuy", true, lookup,
+                    false, null, null, false, false, null));
             assertEquals(LoginDecisionEngine.Decision.PASS_THROUGH, decision);
             assertTrue(LoginDecisionEngine.shouldClassifyOffline(decision, lookup, false));
 

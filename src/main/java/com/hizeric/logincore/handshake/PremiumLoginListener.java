@@ -143,12 +143,6 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         if (!isCurrent(attempt)) {
             return;
         }
-        // Exempt stays subordinate to an authoritative PREMIUM classification.
-        if (context.account().exempt() && !"PREMIUM".equals(context.storedClassification)) {
-            reinjectOriginal(attempt);
-            return;
-        }
-
         Optional<Storage.Link> link = context.account().link();
         UUID linkedUuid = link.map(value -> parseUuid(value.mojangUuid(), attempt)).orElse(null);
         if (link.isPresent() && linkedUuid == null) {
@@ -157,7 +151,6 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         }
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             attempt.name,
-            false,
             true,
             context.lookupResult,
             link.isPresent(),
@@ -165,7 +158,6 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             attempt.uuidHint,
             false,
             isShadowMode(),
-            getConfigBoolean("on-lookup-failure", "DENY").equalsIgnoreCase("ALLOW"),
             context.storedClassification
         );
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);

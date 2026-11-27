@@ -139,8 +139,8 @@ public class MojangClientTest {
             assertFalse(result.isNotPremium());
 
             LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(
-                new LoginDecisionEngine.DecisionInput("TimeoutGuy", false, true, result,
-                    false, null, null, false, false, false, null));
+                new LoginDecisionEngine.DecisionInput("TimeoutGuy", true, result,
+                    false, null, null, false, false, null));
             assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, decision);
             assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, result, false));
 

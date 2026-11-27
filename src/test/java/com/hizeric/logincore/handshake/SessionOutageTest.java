@@ -93,25 +93,24 @@ class SessionOutageTest {
 
         try (Storage storage = new Storage(temporaryDirectory.resolve("outage.db"))) {
             LookupResult outage = LookupResult.unknown(session.reason());
-            for (boolean allowLookupFailure : new boolean[]{false, true}) {
-                LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-                    "OutageGuy", false, true, outage, false, null, null,
-                    false, false, allowLookupFailure, null);
-                LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
+            LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
+                "OutageGuy", true, outage, false, null, null, false, false, null);
+            LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
 
-                assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, outage, false),
-                    "UNKNOWN must never reach the OFFLINE write (allow=" + allowLookupFailure + ")");
-                // Mirror persistOfflineClassification: it only calls this helper when the gate opens.
-                AtomicInteger offlineWrites = new AtomicInteger();
-                if (LoginDecisionEngine.shouldClassifyOffline(decision, outage, false)) {
-                    offlineWrites.incrementAndGet();
-                    OfflineClassification.write(storage, "OutageGuy", () -> { }, key -> { },
-                        message -> { }).join();
-                }
-                assertEquals(0, offlineWrites.get());
-                assertTrue(storage.classification("OutageGuy").get().isEmpty(),
-                    "a session-server outage must not write OFFLINE");
+            assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, decision,
+                "UNKNOWN without a link must never pass through");
+            assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, outage, false),
+                "UNKNOWN must never reach the OFFLINE write");
+            // Mirror persistOfflineClassification: it only calls this helper when the gate opens.
+            AtomicInteger offlineWrites = new AtomicInteger();
+            if (LoginDecisionEngine.shouldClassifyOffline(decision, outage, false)) {
+                offlineWrites.incrementAndGet();
+                OfflineClassification.write(storage, "OutageGuy", () -> { }, key -> { },
+                    message -> { }).join();
             }
+            assertEquals(0, offlineWrites.get());
+            assertTrue(storage.classification("OutageGuy").get().isEmpty(),
+                "a session-server outage must not write OFFLINE");
 
             // Positive control: an authoritative absence still writes OFFLINE, so the storage
             // assertion above is not vacuous.

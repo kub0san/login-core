@@ -157,7 +157,10 @@ public final class LoginCore extends JavaPlugin {
             return false;
         }
         String lookupFailure = getConfig().getString("on-lookup-failure", "DENY");
-        if (!"ALLOW".equalsIgnoreCase(lookupFailure) && !"DENY".equalsIgnoreCase(lookupFailure)) {
+        if ("ALLOW".equalsIgnoreCase(lookupFailure)) {
+            // Tolerated for compatibility only: UNKNOWN lookups are always denied.
+            getLogger().warning("on-lookup-failure: ALLOW is deprecated and ignored; UNKNOWN lookups are denied.");
+        } else if (!"DENY".equalsIgnoreCase(lookupFailure)) {
             getLogger().severe("Invalid on-lookup-failure value '" + lookupFailure + "'. Expected ALLOW or DENY.");
             return false;
         }

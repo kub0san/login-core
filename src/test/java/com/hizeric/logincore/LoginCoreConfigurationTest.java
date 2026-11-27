@@ -64,9 +64,9 @@ class LoginCoreConfigurationTest {
                 assertEquals("mode".equals(key), shadow, key);
                 assertEquals("on-lookup-failure".equals(key), allow, key);
 
-                decide(premiumInput(shadow, allow));
-                decide(offlineInput(shadow, allow));
-                decide(freshInput(shadow, allow));
+                decide(premiumInput(shadow));
+                decide(offlineInput(shadow));
+                decide(freshInput(shadow));
 
                 assertEquals("PREMIUM", storage.classification("PremiumGuy").get().orElseThrow(), key);
                 assertEquals("OFFLINE", storage.classification("OfflineGuy").get().orElseThrow(), key);
@@ -76,24 +76,24 @@ class LoginCoreConfigurationTest {
         }
     }
 
-    private static LoginDecisionEngine.DecisionInput premiumInput(boolean shadow, boolean allow) {
-        return new LoginDecisionEngine.DecisionInput("PremiumGuy", false, true,
-            LookupResult.unknown("outage"), false, null, null, false, shadow, allow, "PREMIUM");
+    private static LoginDecisionEngine.DecisionInput premiumInput(boolean shadow) {
+        return new LoginDecisionEngine.DecisionInput("PremiumGuy", true,
+            LookupResult.unknown("outage"), false, null, null, false, shadow, "PREMIUM");
     }
 
-    private static LoginDecisionEngine.DecisionInput offlineInput(boolean shadow, boolean allow) {
-        return new LoginDecisionEngine.DecisionInput("OfflineGuy", false, true,
-            LookupResult.premium(PREMIUM_UUID, "OfflineGuy"), false, null, null, false, shadow, allow, "OFFLINE");
+    private static LoginDecisionEngine.DecisionInput offlineInput(boolean shadow) {
+        return new LoginDecisionEngine.DecisionInput("OfflineGuy", true,
+            LookupResult.premium(PREMIUM_UUID, "OfflineGuy"), false, null, null, false, shadow, "OFFLINE");
     }
 
-    private static LoginDecisionEngine.DecisionInput freshInput(boolean shadow, boolean allow) {
-        return new LoginDecisionEngine.DecisionInput("FreshGuy", false, true,
-            LookupResult.unknown("outage"), false, null, null, false, shadow, allow, null);
+    private static LoginDecisionEngine.DecisionInput freshInput(boolean shadow) {
+        return new LoginDecisionEngine.DecisionInput("FreshGuy", true,
+            LookupResult.unknown("outage"), false, null, null, false, shadow, null);
     }
 
     private static void decide(LoginDecisionEngine.DecisionInput input) {
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
-        // Even when ALLOW turns an UNKNOWN into PASS_THROUGH, no OFFLINE write is authorised.
+        // An UNKNOWN lookup is inconclusive, so no OFFLINE write is authorised regardless of config.
         assertFalse(LoginDecisionEngine.shouldClassifyOffline(decision, input.lookupResult(), false));
     }
 

@@ -13,16 +13,19 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class LoginDecisionEngineTest {
 
     @Test
+    void decisionInputHasExactlyNineComponents() {
+        assertEquals(9, LoginDecisionEngine.DecisionInput.class.getRecordComponents().length);
+    }
+
+    @Test
     void rejectsInvalidNames() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "!bad!",
             false,
-            false,
             null,
             false,
             null,
             null,
-            false,
             false,
             false,
             null
@@ -32,35 +35,31 @@ class LoginDecisionEngineTest {
     }
 
     @Test
-    void allowsExemptNames() {
-        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "Admin",
-            true,
-            true,
-            LookupResult.notPremium(),
-            false,
-            null,
-            null,
-            false,
-            false,
-            false,
-            null
-        );
-
-        assertEquals(LoginDecisionEngine.Decision.PASS_THROUGH, LoginDecisionEngine.decide(input));
-    }
-
-    @Test
-    void premiumClassifiedNameIsNeverExempt() {
+    void unknownLookupWithoutLinkIsAlwaysKicked() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch",
             true,
+            LookupResult.unknown("timeout"),
+            false,
+            null,
+            null,
+            false,
+            false,
+            null
+        );
+
+        assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, LoginDecisionEngine.decide(input));
+    }
+
+    @Test
+    void storedPremiumStillRequiresHandshake() {
+        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
+            "Notch",
             true,
             LookupResult.notPremium(),
             false,
             null,
             null,
-            false,
             false,
             false,
             "PREMIUM"
@@ -79,13 +78,11 @@ class LoginDecisionEngineTest {
 
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch",
-            false,
             true,
             LookupResult.premium(premiumUuid, "Notch"),
             false,
             null,
             hintedUuid,
-            false,
             false,
             false,
             null
@@ -100,13 +97,11 @@ class LoginDecisionEngineTest {
 
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch",
-            false,
             true,
             LookupResult.premium(premiumUuid, "Notch"),
             false,
             null,
             premiumUuid,
-            false,
             false,
             false,
             null
@@ -133,7 +128,6 @@ class LoginDecisionEngineTest {
     void sendsLinkedNamesThroughVerificationEvenIfLookupSaysNotPremium() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch",
-            false,
             true,
             LookupResult.notPremium(),
             true,
@@ -141,7 +135,6 @@ class LoginDecisionEngineTest {
             null,
             false,
             false,
-            true,
             null
         );
 
@@ -237,13 +230,11 @@ class LoginDecisionEngineTest {
     void unknownLookupWithoutLinkIsDeniedByDefault() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch",
-            false,
             true,
             LookupResult.unknown("timeout"),
             false,
             null,
             null,
-            false,
             false,
             false,
             null
@@ -253,30 +244,11 @@ class LoginDecisionEngineTest {
     }
 
     @Test
-    void unknownLookupWithoutLinkPassesThroughWhenAllowed() {
-        LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "Notch",
-            false,
-            true,
-            LookupResult.unknown("timeout"),
-            false,
-            null,
-            null,
-            false,
-            false,
-            true,
-            null
-        );
-
-        assertEquals(LoginDecisionEngine.Decision.PASS_THROUGH, LoginDecisionEngine.decide(input));
-    }
-
-    @Test
     void storedOfflineCannotBecomePremium() {
         UUID premiumUuid = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1");
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "Notch", false, true, LookupResult.premium(premiumUuid, "Notch"),
-            false, null, premiumUuid, false, false, false, "OFFLINE"
+            "Notch", true, LookupResult.premium(premiumUuid, "Notch"),
+            false, null, premiumUuid, false, false, "OFFLINE"
         );
 
         assertEquals(LoginDecisionEngine.Decision.DISCONNECT_NAME_RESERVED, LoginDecisionEngine.decide(input));
@@ -285,8 +257,8 @@ class LoginDecisionEngineTest {
     @Test
     void storedPremiumIsNotDowngradedByUnknownLookup() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "Notch", false, true, LookupResult.unknown("timeout"),
-            false, null, null, false, false, true, "PREMIUM"
+            "Notch", true, LookupResult.unknown("timeout"),
+            false, null, null, false, false, "PREMIUM"
         );
 
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
@@ -298,8 +270,8 @@ class LoginDecisionEngineTest {
     @Test
     void storedPremiumNotFoundDoesNotFallThroughToPassword() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "Notch", false, true, LookupResult.notPremium(),
-            false, null, null, false, false, false, "PREMIUM"
+            "Notch", true, LookupResult.notPremium(),
+            false, null, null, false, false, "PREMIUM"
         );
 
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
@@ -311,8 +283,8 @@ class LoginDecisionEngineTest {
     @Test
     void notFoundPassesThroughAndClassifiesOnlyWhenUnlinked() {
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
-            "OfflineGuy", false, true, LookupResult.notPremium(),
-            false, null, null, false, false, false, null
+            "OfflineGuy", true, LookupResult.notPremium(),
+            false, null, null, false, false, null
         );
 
         LoginDecisionEngine.Decision decision = LoginDecisionEngine.decide(input);
@@ -328,19 +300,11 @@ class LoginDecisionEngineTest {
     @Test
     void unknownLookupNeverClassifiesOffline() {
         LoginDecisionEngine.DecisionInput denied = new LoginDecisionEngine.DecisionInput(
-            "Notch", false, true, LookupResult.unknown("5xx"),
-            false, null, null, false, false, false, null
+            "Notch", true, LookupResult.unknown("5xx"),
+            false, null, null, false, false, null
         );
         LoginDecisionEngine.Decision deniedDecision = LoginDecisionEngine.decide(denied);
         assertEquals(LoginDecisionEngine.Decision.KICK_VERIFY_FAILED, deniedDecision);
         assertFalse(LoginDecisionEngine.shouldClassifyOffline(deniedDecision, denied.lookupResult(), false));
-
-        LoginDecisionEngine.DecisionInput allowed = new LoginDecisionEngine.DecisionInput(
-            "Notch", false, true, LookupResult.unknown("timeout"),
-            false, null, null, false, false, true, null
-        );
-        LoginDecisionEngine.Decision allowedDecision = LoginDecisionEngine.decide(allowed);
-        assertEquals(LoginDecisionEngine.Decision.PASS_THROUGH, allowedDecision);
-        assertFalse(LoginDecisionEngine.shouldClassifyOffline(allowedDecision, allowed.lookupResult(), false));
     }
 }
