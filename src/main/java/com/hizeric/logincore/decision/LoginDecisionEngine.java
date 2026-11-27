@@ -101,7 +101,7 @@ public final class LoginDecisionEngine {
     }
 
     public static PostVerifyAction decidePostVerify(boolean handshakeSucceeded, UUID verifiedUuid,
-                                                     boolean authMeRegistered, UUID linkedUuid,
+                                                     boolean registered, UUID linkedUuid,
                                                      ExistingAccountPolicy policy) {
         if (!handshakeSucceeded || verifiedUuid == null) {
             return PostVerifyAction.VERIFY_FAILED;
@@ -109,7 +109,7 @@ public final class LoginDecisionEngine {
         if (linkedUuid != null && !linkedUuid.equals(verifiedUuid)) {
             return PostVerifyAction.ACCOUNT_CONFLICT;
         }
-        if (!authMeRegistered) {
+        if (!registered) {
             return PostVerifyAction.REGISTER_AND_AUTO_LOGIN;
         }
         // A stored link is the commit marker: only an already-committed identity auto-logs in.

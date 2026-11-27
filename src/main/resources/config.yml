@@ -1,3 +1,4 @@
+config-version: 1
 mode: ENFORCE
 on-lookup-failure: DENY
 # Existing-account policy: REQUIRE_PASSWORD_ONCE | DENY

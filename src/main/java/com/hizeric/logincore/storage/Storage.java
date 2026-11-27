@@ -349,11 +349,6 @@ public final class Storage implements AutoCloseable {
         });
     }
 
-    /** @deprecated Use {@link #setLoggedIn(String)}. */
-    public CompletableFuture<Void> markLoggedIn(String name) {
-        return setLoggedIn(name);
-    }
-
     /** Marks an account as logged out. */
     public CompletableFuture<Void> setLoggedOut(String name) {
         return submit(() -> {

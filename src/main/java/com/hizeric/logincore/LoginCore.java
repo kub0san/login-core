@@ -5,6 +5,8 @@ import com.hizeric.logincore.command.AdminCommand;
 import com.hizeric.logincore.command.ChangepasswordCommand;
 import com.hizeric.logincore.command.LoginCommand;
 import com.hizeric.logincore.command.RegisterCommand;
+import com.hizeric.logincore.config.ConfigUpdater;
+import com.hizeric.logincore.config.LegacyAuthMeImport;
 import com.hizeric.logincore.handshake.LoginMetrics;
 import com.hizeric.logincore.handshake.PremiumSupport;
 import com.hizeric.logincore.handshake.PremiumSupportFactory;
@@ -18,7 +20,9 @@ import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.storage.Storage;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.http.HttpClient;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -37,7 +41,13 @@ public final class LoginCore extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        reloadConfig();
+        try {
+            prepareConfiguration();
+        } catch (IOException | RuntimeException ex) {
+            getLogger().severe("login-core could not prepare configuration: " + ex.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
         if (getServer().getOnlineMode()) {
             getLogger().severe("login-core requires an offline-mode server. Set online-mode=false in server.properties.");
@@ -121,6 +131,32 @@ public final class LoginCore extends JavaPlugin {
             getLogger().severe("login-core initialization failed: " + ex.getMessage());
             getServer().getPluginManager().disablePlugin(this);
         }
+    }
+
+    private void prepareConfiguration() throws IOException {
+        byte[] defaults;
+        try (InputStream bundled = getResource("config.yml")) {
+            if (bundled == null) {
+                throw new IOException("Bundled config.yml resource is missing");
+            }
+            defaults = bundled.readAllBytes();
+        }
+
+        var dataFolder = getDataFolder().toPath();
+        LegacyAuthMeImport.ImportResult legacy = LegacyAuthMeImport.importIfNeeded(
+            dataFolder, new ByteArrayInputStream(defaults), getLogger());
+        if (legacy.imported()) {
+            getLogger().info("Imported legacy AuthMe config: " + legacy.droppedLegacyKeys()
+                + " legacy key(s) dropped, databaseCopied=" + legacy.databaseCopied()
+                + ", backup=" + legacy.backup().getFileName());
+        }
+        ConfigUpdater.UpdateResult update = ConfigUpdater.reconcile(
+            dataFolder.resolve("config.yml"), new ByteArrayInputStream(defaults), getLogger());
+        if (update.changed()) {
+            getLogger().info("Config updated: " + update.added() + " key(s) added, "
+                + update.removed() + " key(s) removed.");
+        }
+        reloadConfig();
     }
 
     @Override

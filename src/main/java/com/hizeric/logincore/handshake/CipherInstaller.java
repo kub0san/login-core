@@ -23,7 +23,7 @@ public final class CipherInstaller {
         }
 
         ChannelPipeline pipeline = channel.pipeline();
-        if (pipeline.get("authmePAL_decrypt") != null || pipeline.get("authmePAL_encrypt") != null) {
+        if (pipeline.get("logincore-decrypt") != null || pipeline.get("logincore-encrypt") != null) {
             throw new IllegalStateException("Encryption handlers are already installed");
         }
 
@@ -40,8 +40,8 @@ public final class CipherInstaller {
         if (pipeline.get("splitter") == null || pipeline.get("prepender") == null) {
             throw new IllegalStateException("Expected Minecraft framing handlers 'splitter' and 'prepender' were not found");
         }
-        pipeline.addBefore("splitter", "authmePAL_decrypt", new DecryptHandler(decryptCipher));
-        pipeline.addBefore("prepender", "authmePAL_encrypt", new EncryptHandler(encryptCipher));
+        pipeline.addBefore("splitter", "logincore-decrypt", new DecryptHandler(decryptCipher));
+        pipeline.addBefore("prepender", "logincore-encrypt", new EncryptHandler(encryptCipher));
     }
 
     private static final class DecryptHandler extends MessageToMessageDecoder<ByteBuf> {

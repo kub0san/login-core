@@ -151,7 +151,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
         String link = account.link().map(value -> value.mojangUuid() + " (" + value.source() + ")").orElse("none");
         String conflict = uuidLink.filter(value -> account.link().isEmpty())
             .map(value -> ", linked-name: " + value.name()).orElse("");
-        return "AuthMe registered: " + registered + ", link: " + link + conflict
+        return "Registered: " + registered + ", link: " + link + conflict
             + ", classification: " + classification.orElse("UNCLASSIFIED");
     }
 
@@ -170,7 +170,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length == 2 && "audit".equalsIgnoreCase(args[1])) {
-            sender.sendMessage(ChatColor.YELLOW + "Migration audit started. This may take about one second per AuthMe account.");
+            sender.sendMessage(ChatColor.YELLOW + "Migration audit started. This may take about one second per registered account.");
             migrationAudit.startAudit().whenComplete((path, error) -> onMain(sender, () -> {
                 if (error != null) {
                     reportError(sender, error);

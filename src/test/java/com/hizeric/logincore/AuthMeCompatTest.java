@@ -80,7 +80,7 @@ class AuthMeCompatTest {
             assertEquals(Optional.of(BCRYPT_A), storage.authmePassword("NOTCH").get());
             assertTrue(storage.authmePassword("someone-else").get().isEmpty());
 
-            storage.markLoggedIn("nOtCh").get();
+            storage.setLoggedIn("nOtCh").get();
             try (Statement statement = connection.createStatement();
                  ResultSet result = statement.executeQuery(
                      "SELECT isLogged, lastlogin FROM authme WHERE username = 'notch' COLLATE NOCASE")) {
