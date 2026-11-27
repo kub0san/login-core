@@ -109,7 +109,7 @@ public final class LoginCore extends JavaPlugin {
             LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState,
                 authListener::onPasswordLogin);
             RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState);
-            ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage);
+            ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage, authState);
             getCommand("login").setExecutor(loginCommand);
             getCommand("login").setTabCompleter(loginCommand);
             getCommand("register").setExecutor(registerCommand);

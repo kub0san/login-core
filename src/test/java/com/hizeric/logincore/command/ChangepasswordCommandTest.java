@@ -2,6 +2,7 @@ package com.hizeric.logincore.command;
 
 import com.hizeric.logincore.TestPlugin;
 import com.hizeric.logincore.command.PasswordCommandTestSupport.Recorder;
+import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -19,13 +20,15 @@ class ChangepasswordCommandTest {
     Path temporaryDirectory;
 
     private Storage storage;
+    private AuthState state;
     private ChangepasswordCommand command;
 
     @BeforeEach
     void setUp() throws Exception {
         storage = new Storage(temporaryDirectory.resolve("changepassword.db"));
         storage.registerPlayer("OfflineGuy", "secret12").get();
-        command = new ChangepasswordCommand(TestPlugin.create(), Runnable::run, storage);
+        state = new AuthState();
+        command = new ChangepasswordCommand(TestPlugin.create(), Runnable::run, storage, state);
     }
 
     @AfterEach
@@ -35,6 +38,7 @@ class ChangepasswordCommandTest {
 
     @Test
     void changesPasswordAfterVerifyingTheOldOne() throws Exception {
+        state.authenticate("OfflineGuy");
         Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
 
         assertTrue(command.onCommand(player.player(), null, "changepassword",
@@ -47,6 +51,7 @@ class ChangepasswordCommandTest {
 
     @Test
     void wrongOldPasswordLeavesThePasswordAlone() throws Exception {
+        state.authenticate("OfflineGuy");
         Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
 
         assertTrue(command.onCommand(player.player(), null, "changepassword",
@@ -55,6 +60,20 @@ class ChangepasswordCommandTest {
         assertTrue(storage.verifyPassword("OfflineGuy", "secret12").get());
         assertFalse(storage.verifyPassword("OfflineGuy", "newsecret").get());
         assertTrue(player.said("incorrect"), player.transcript());
+    }
+
+    @Test
+    void unauthenticatedPlayerCannotProbePasswords() throws Exception {
+        Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "changepassword",
+            new String[]{"secret12", "newsecret"}));
+
+        assertTrue(storage.verifyPassword("OfflineGuy", "secret12").get(),
+            "a pre-auth command must not consume or change the stored password");
+        assertFalse(storage.verifyPassword("OfflineGuy", "newsecret").get());
+        assertFalse(player.said("incorrect"), player.transcript());
+        assertTrue(player.said("Log in first"), player.transcript());
     }
 
     @Test

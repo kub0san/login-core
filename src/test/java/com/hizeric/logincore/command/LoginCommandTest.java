@@ -92,7 +92,7 @@ class LoginCommandTest {
     }
 
     @Test
-    void fiveFailuresWithinWindowKickAndClearTheCounter() {
+    void fiveFailuresWithinWindowKickAndKeepTheCounter() {
         Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
 
         for (int attempt = 1; attempt <= 5; attempt++) {
@@ -102,12 +102,33 @@ class LoginCommandTest {
 
         assertFalse(state.isAuthenticated("offlineguy"));
         assertEquals(1, player.kicks().size());
-        assertTrue(player.kicks().get(0).toLowerCase().contains("too many"), player.kicks().toString());
+        assertEquals("Too many failed login attempts. Reconnect and try again.", player.kicks().get(0));
         assertEquals(4, player.messages().size(), player.transcript());
+        for (int attempt = 1; attempt <= 4; attempt++) {
+            assertEquals("Incorrect password. " + (5 - attempt) + " attempts remaining.",
+                player.messages().get(attempt - 1), player.transcript());
+        }
     }
 
     @Test
-    void successfulLoginAfterKickWorksBecauseCounterWasCleared() {
+    void reconnectWithinWindowDoesNotGrantFiveNewGuesses() {
+        Recorder first = PasswordCommandTestSupport.player("OfflineGuy");
+        for (int attempt = 0; attempt < 5; attempt++) {
+            command.onCommand(first.player(), null, "login", new String[]{"wrongpass"});
+        }
+        assertEquals(1, first.kicks().size());
+
+        Recorder reconnected = PasswordCommandTestSupport.player("OfflineGuy");
+        assertTrue(command.onCommand(reconnected.player(), null, "login", new String[]{"wrongpass"}));
+
+        assertEquals(1, reconnected.kicks().size(),
+            "one wrong password right after a kick must be kicked, not start a fresh 5-guess window");
+        assertEquals("Too many failed login attempts. Reconnect and try again.", reconnected.kicks().get(0));
+        assertTrue(reconnected.messages().isEmpty(), reconnected.transcript());
+    }
+
+    @Test
+    void successfulLoginAfterKickStillWorks() {
         Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
         for (int attempt = 0; attempt < 5; attempt++) {
             command.onCommand(player.player(), null, "login", new String[]{"wrongpass"});

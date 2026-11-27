@@ -95,7 +95,7 @@ public final class LoginCommand implements CommandExecutor, TabCompleter {
                 }
                 return new Failures(previous.count() + 1, previous.firstAt());
             });
-            if (updated.count() >= MAX_FAILURES && failures.remove(name, updated)) {
+            if (updated.count() >= MAX_FAILURES) {
                 onMain(() -> player.kick(miniMessage.deserialize(
                     "<red>Too many failed login attempts. Reconnect and try again.")));
             } else {

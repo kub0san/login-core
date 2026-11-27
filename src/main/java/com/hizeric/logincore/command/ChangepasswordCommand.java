@@ -1,5 +1,6 @@
 package com.hizeric.logincore.command;
 
+import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Bukkit;
@@ -18,12 +19,14 @@ public final class ChangepasswordCommand implements CommandExecutor, TabComplete
     private final JavaPlugin plugin;
     private final Executor workers;
     private final Storage storage;
+    private final AuthState authState;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public ChangepasswordCommand(JavaPlugin plugin, Executor workers, Storage storage) {
+    public ChangepasswordCommand(JavaPlugin plugin, Executor workers, Storage storage, AuthState authState) {
         this.plugin = plugin;
         this.workers = workers;
         this.storage = storage;
+        this.authState = authState;
     }
 
     @Override
@@ -53,6 +56,10 @@ public final class ChangepasswordCommand implements CommandExecutor, TabComplete
         try {
             if ("PREMIUM".equals(storage.classification(name).get().orElse(null))) {
                 onMain(() -> message(sender, "<red>Premium accounts do not use passwords."));
+                return;
+            }
+            if (!authState.isAuthenticated(name)) {
+                onMain(() -> message(sender, "<red>Log in first: /login or /register."));
                 return;
             }
             if (storage.changePassword(name, oldPassword, newPassword).get()) {
