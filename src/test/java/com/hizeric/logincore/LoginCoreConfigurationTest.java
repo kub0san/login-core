@@ -41,6 +41,17 @@ class LoginCoreConfigurationTest {
         assertTrue(LoginCore.validExistingAccountPolicy("DENY"));
     }
 
+    @Test
+    void lookupFailurePolicyAcceptsDeprecatedAllowAndDenyOnly() {
+        assertTrue(LoginCore.validLookupFailurePolicy("ALLOW"));
+        assertTrue(LoginCore.validLookupFailurePolicy("allow"));
+        assertTrue(LoginCore.validLookupFailurePolicy("DENY"));
+        assertTrue(LoginCore.validLookupFailurePolicy("deny"));
+        assertFalse(LoginCore.validLookupFailurePolicy("IGNORE"));
+        assertFalse(LoginCore.validLookupFailurePolicy(""));
+        assertFalse(LoginCore.validLookupFailurePolicy(null));
+    }
+
     /** Case 11: config is read at decision time; no key can write or rewrite a stored type. */
     @Test
     void configKeysNeverChangeStoredClassification() throws Exception {

@@ -157,12 +157,13 @@ public final class LoginCore extends JavaPlugin {
             return false;
         }
         String lookupFailure = getConfig().getString("on-lookup-failure", "DENY");
+        if (!validLookupFailurePolicy(lookupFailure)) {
+            getLogger().severe("Invalid on-lookup-failure value '" + lookupFailure + "'. Expected ALLOW or DENY.");
+            return false;
+        }
         if ("ALLOW".equalsIgnoreCase(lookupFailure)) {
             // Tolerated for compatibility only: UNKNOWN lookups are always denied.
             getLogger().warning("on-lookup-failure: ALLOW is deprecated and ignored; UNKNOWN lookups are denied.");
-        } else if (!"DENY".equalsIgnoreCase(lookupFailure)) {
-            getLogger().severe("Invalid on-lookup-failure value '" + lookupFailure + "'. Expected ALLOW or DENY.");
-            return false;
         }
         String policy = getConfig().getString("existing-account-policy", "REQUIRE_PASSWORD_ONCE");
         if (!validExistingAccountPolicy(policy)) {
@@ -181,6 +182,10 @@ public final class LoginCore extends JavaPlugin {
             return false;
         }
         return true;
+    }
+
+    static boolean validLookupFailurePolicy(String value) {
+        return "ALLOW".equalsIgnoreCase(value) || "DENY".equalsIgnoreCase(value);
     }
 
     static boolean validExistingAccountPolicy(String policy) {
