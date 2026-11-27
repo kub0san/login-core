@@ -43,6 +43,8 @@ login-core is for a direct Paper server, not a proxy network. An offline-mode se
 
 The runtime plugin name is `AuthMe` (per ADR 0008), so this build uses the `plugins/AuthMe` data folder and `authme.db`. An existing AuthMe-shaped database is opened in place; back it up before upgrading. Previous `AuthMePAL` configuration and link/exemption data are not automatically imported — see [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
 
+The runtime `name: AuthMe` exists only for `plugins/AuthMe` data-folder continuity and downstream `depend: [AuthMe]` resolution. login-core provides no `AuthMeApi` façade and no binary compatibility with `fr.xephi.authme.events.*`; plugins using the AuthMe API or events must be rebuilt against login-core. `com.hizeric.logincore.events.LoginEvent` fires after successful password login and premium auto-login; `RegisterEvent` fires after `/register` and premium auto-registration.
+
 The generated config controls Mojang lookup endpoints, lookup-failure behavior, existing AuthMe account policy, throttles, premium UUID mode, timeouts, and kick messages (`name-reserved`, `verify-failed`, `lookup-unavailable`, `account-conflict`, `rename-conflict`, `throttled`). `rename-conflict` tells a renamed premium player that their UUID is linked under another name and that an administrator must resolve it; the old link is never moved automatically. Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
 
 ### Premium UUID mode
