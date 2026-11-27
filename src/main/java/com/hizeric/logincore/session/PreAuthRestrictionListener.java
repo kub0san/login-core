@@ -31,6 +31,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executor;
+import java.util.function.Supplier;
 
 /** Restricts players until they are authenticated or classified PREMIUM. */
 public final class PreAuthRestrictionListener implements Listener {
@@ -46,21 +47,26 @@ public final class PreAuthRestrictionListener implements Listener {
         MINI_MESSAGE.deserialize("<yellow>Log in to move.");
     private static final Component TIMEOUT_KICK =
         MINI_MESSAGE.deserialize("<red>Login timed out. Reconnect and log in.");
+    private static final Component UNAVAILABLE_KICK =
+        MINI_MESSAGE.deserialize("<red>Premium login is unavailable. Please try again later.");
 
     private final JavaPlugin plugin;
     private final AuthState authState;
     private final Storage storage;
     private final Executor workers;
+    private final Supplier<Boolean> premiumAvailable;
     private final ConcurrentMap<String, Long> joinedAt = new ConcurrentHashMap<>();
     private final Set<String> premiumNames = ConcurrentHashMap.newKeySet();
     private final Set<String> moveWarned = ConcurrentHashMap.newKeySet();
     private volatile BukkitTask timeoutTask;
 
-    public PreAuthRestrictionListener(JavaPlugin plugin, AuthState authState, Storage storage, Executor workers) {
+    public PreAuthRestrictionListener(JavaPlugin plugin, AuthState authState, Storage storage, Executor workers,
+                                      Supplier<Boolean> premiumAvailable) {
         this.plugin = plugin;
         this.authState = authState;
         this.storage = storage;
         this.workers = workers;
+        this.premiumAvailable = premiumAvailable;
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -83,8 +89,13 @@ public final class PreAuthRestrictionListener implements Listener {
                     return;
                 }
                 if ("PREMIUM".equalsIgnoreCase(result.orElse(null))) {
-                    premiumNames.add(name);
-                    authState.authenticate(name);
+                    if (Boolean.TRUE.equals(premiumAvailable.get())) {
+                        premiumNames.add(name);
+                        authState.authenticate(name);
+                    } else {
+                        onMain(() -> player.kick(UNAVAILABLE_KICK));
+                        authState.logout(name);
+                    }
                 }
             }), workers);
         } catch (RuntimeException ex) {

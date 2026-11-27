@@ -29,7 +29,10 @@ class RegisterEventFiringTest {
     @BeforeEach
     void setUp() throws Exception {
         storage = new Storage(temporaryDirectory.resolve("register-event.db"));
-        command = new RegisterCommand(TestPlugin.create(), Runnable::run, storage, new AuthState());
+        command = new RegisterCommand(TestPlugin.create(), Runnable::run, storage, new AuthState(), "SHADOW",
+            (name, ip) -> {
+                throw new AssertionError("SHADOW mode must not look up names");
+            });
     }
 
     @AfterEach

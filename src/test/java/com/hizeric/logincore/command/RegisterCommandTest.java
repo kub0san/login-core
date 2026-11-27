@@ -2,6 +2,7 @@ package com.hizeric.logincore.command;
 
 import com.hizeric.logincore.TestPlugin;
 import com.hizeric.logincore.command.PasswordCommandTestSupport.Recorder;
+import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import org.junit.jupiter.api.AfterEach;
@@ -11,7 +12,11 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -28,12 +33,16 @@ class RegisterCommandTest {
     void setUp() throws Exception {
         storage = new Storage(temporaryDirectory.resolve("register.db"));
         state = new AuthState();
-        command = new RegisterCommand(TestPlugin.create(), Runnable::run, storage, state);
+        command = commandWithLookup((name, ip) -> LookupResult.notPremium());
     }
 
     @AfterEach
     void tearDown() {
         storage.close();
+    }
+
+    private RegisterCommand commandWithLookup(BiFunction<String, String, LookupResult> lookup) {
+        return new RegisterCommand(TestPlugin.create(), Runnable::run, storage, state, "ENFORCE", lookup);
     }
 
     @Test
@@ -96,6 +105,110 @@ class RegisterCommandTest {
         assertFalse(state.isAuthenticated("premiumguy"));
         assertFalse(storage.verifyPassword("PremiumGuy", "secret12").get());
         assertTrue(player.transcript().toLowerCase().contains("premium accounts"), player.transcript());
+    }
+
+    @Test
+    void unclassifiedRegistrationRequiresNotPremiumLookup() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        command = commandWithLookup((name, ip) -> {
+            calls.incrementAndGet();
+            return LookupResult.notPremium();
+        });
+        Recorder player = PasswordCommandTestSupport.player("FreshGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertEquals(1, calls.get());
+        assertTrue(storage.verifyPassword("FRESHGUY", "secret12").get());
+        assertTrue(state.isAuthenticated("freshguy"));
+        assertEquals("OFFLINE", storage.classification("FreshGuy").get().orElseThrow());
+        assertTrue(player.said("registered"), player.transcript());
+    }
+
+    @Test
+    void premiumLookupRefusesUnclassifiedRegistration() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        command = commandWithLookup((name, ip) -> {
+            calls.incrementAndGet();
+            return LookupResult.premium(UUID.randomUUID(), "Real");
+        });
+        Recorder player = PasswordCommandTestSupport.player("Namesake");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertEquals(1, calls.get());
+        assertFalse(storage.verifyPassword("Namesake", "secret12").get());
+        assertTrue(storage.classification("Namesake").get().isEmpty());
+        assertFalse(state.isAuthenticated("namesake"));
+        assertTrue(player.transcript().toLowerCase().contains("premium accounts"), player.transcript());
+    }
+
+    @Test
+    void unknownLookupRefusesUnclassifiedRegistration() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        command = commandWithLookup((name, ip) -> {
+            calls.incrementAndGet();
+            return LookupResult.unknown("timeout");
+        });
+        Recorder player = PasswordCommandTestSupport.player("TimeoutGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertEquals(1, calls.get());
+        assertFalse(storage.verifyPassword("TimeoutGuy", "secret12").get());
+        assertTrue(storage.classification("TimeoutGuy").get().isEmpty());
+        assertFalse(state.isAuthenticated("timeoutguy"));
+        assertTrue(player.said("verify"), player.transcript());
+    }
+
+    @Test
+    void storedPremiumRefusesRegistration() throws Exception {
+        storage.setClassification("PremiumGuy", "PREMIUM").get();
+        AtomicInteger calls = new AtomicInteger();
+        command = commandWithLookup((name, ip) -> {
+            calls.incrementAndGet();
+            return LookupResult.notPremium();
+        });
+        Recorder player = PasswordCommandTestSupport.player("PremiumGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertEquals(0, calls.get());
+        assertFalse(storage.verifyPassword("PremiumGuy", "secret12").get());
+        assertEquals("PREMIUM", storage.classification("PremiumGuy").get().orElseThrow());
+        assertFalse(state.isAuthenticated("premiumguy"));
+    }
+
+    @Test
+    void storedOfflineRegistrationSucceedsWithoutLookup() throws Exception {
+        storage.setClassification("OfflineGuy", "OFFLINE").get();
+        AtomicInteger calls = new AtomicInteger();
+        command = commandWithLookup((name, ip) -> {
+            calls.incrementAndGet();
+            return LookupResult.notPremium();
+        });
+        Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertEquals(0, calls.get());
+        assertTrue(storage.verifyPassword("OfflineGuy", "secret12").get());
+        assertEquals("OFFLINE", storage.classification("OfflineGuy").get().orElseThrow());
+    }
+
+    @Test
+    void shadowModeAllowsUnclassifiedRegistration() throws Exception {
+        command = new RegisterCommand(TestPlugin.create(), Runnable::run, storage, state, "SHADOW",
+            (name, ip) -> {
+                throw new AssertionError("SHADOW mode must not look up names");
+            });
+        Recorder player = PasswordCommandTestSupport.player("ShadowGuy");
+
+        assertTrue(command.onCommand(player.player(), null, "register", new String[]{"secret12", "secret12"}));
+
+        assertTrue(storage.verifyPassword("ShadowGuy", "secret12").get());
+        assertTrue(storage.classification("ShadowGuy").get().isEmpty());
+        assertTrue(state.isAuthenticated("shadowguy"));
     }
 
     @Test

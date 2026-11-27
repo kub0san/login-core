@@ -2,6 +2,8 @@ package com.hizeric.logincore.session;
 
 import com.hizeric.logincore.TestPlugin;
 import com.hizeric.logincore.storage.Storage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -10,6 +12,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.lang.reflect.Proxy;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -28,7 +32,7 @@ class PreAuthRestrictionListenerTest {
     void setUp() throws Exception {
         storage = new Storage(temporaryDirectory.resolve("restrictions.db"));
         state = new AuthState();
-        listener = new PreAuthRestrictionListener(TestPlugin.create(), state, storage, Runnable::run);
+        listener = new PreAuthRestrictionListener(TestPlugin.create(), state, storage, Runnable::run, () -> true);
     }
 
     @AfterEach
@@ -75,6 +79,34 @@ class PreAuthRestrictionListenerTest {
     }
 
     @Test
+    void storedPremiumIsKickedWhenPremiumSupportUnavailable() throws Exception {
+        listener = new PreAuthRestrictionListener(TestPlugin.create(), state, storage, Runnable::run, () -> false);
+        storage.setClassification("PremiumGuy", "PREMIUM").get();
+        List<String> kicks = new CopyOnWriteArrayList<>();
+
+        listener.onJoin(player("PremiumGuy", kicks));
+        await(() -> !kicks.isEmpty());
+
+        assertFalse(kicks.isEmpty(), "stored PREMIUM must be kicked when premium support is unavailable");
+        assertTrue(kicks.get(0).toLowerCase().contains("unavailable"), kicks.toString());
+        assertFalse(state.isAuthenticated("premiumguy"));
+        assertTrue(listener.shouldRestrict("PremiumGuy"));
+    }
+
+    @Test
+    void storedPremiumBypassesWhenPremiumSupportAvailable() throws Exception {
+        storage.setClassification("PremiumGuy", "PREMIUM").get();
+        List<String> kicks = new CopyOnWriteArrayList<>();
+
+        listener.onJoin(player("PremiumGuy", kicks));
+        await(() -> state.isAuthenticated("premiumguy"));
+
+        assertTrue(state.isAuthenticated("premiumguy"));
+        assertFalse(listener.shouldRestrict("PREMIUMGUY"));
+        assertTrue(kicks.isEmpty(), kicks.toString());
+    }
+
+    @Test
     void failedClassificationLookupLeavesPlayerRestricted() {
         storage.close();
 
@@ -106,6 +138,13 @@ class PreAuthRestrictionListenerTest {
         assertTrue(listener.shouldRestrict("PremiumGuy"));
     }
 
+    private static String kickText(Object value) {
+        if (value instanceof Component component) {
+            return PlainTextComponentSerializer.plainText().serialize(component);
+        }
+        return String.valueOf(value);
+    }
+
     private static void await(BooleanSupplier condition) throws InterruptedException {
         long deadline = System.currentTimeMillis() + 2_000L;
         while (!condition.getAsBoolean() && System.currentTimeMillis() < deadline) {
@@ -114,10 +153,20 @@ class PreAuthRestrictionListenerTest {
     }
 
     private static Player player(String name) {
+        return player(name, null);
+    }
+
+    private static Player player(String name, List<String> kicks) {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
             (self, method, args) -> switch (method.getName()) {
                 case "getName" -> name;
                 case "isOnline" -> Boolean.TRUE;
+                case "kick", "kickPlayer" -> {
+                    if (kicks != null) {
+                        kicks.add(kickText(args[0]));
+                    }
+                    yield null;
+                }
                 case "equals" -> self == args[0];
                 case "hashCode" -> System.identityHashCode(self);
                 case "toString" -> "Player[" + name + "]";

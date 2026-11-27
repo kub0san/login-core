@@ -97,7 +97,8 @@ public final class LoginCore extends JavaPlugin {
 
             LoginCommand loginCommand = new LoginCommand(this, workers, storage, authState,
                 authListener::onPasswordLogin);
-            RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState);
+            RegisterCommand registerCommand = new RegisterCommand(this, workers, storage, authState,
+                getConfig().getString("mode", "ENFORCE"), (name, ip) -> mojang.lookupName(name, ip));
             ChangepasswordCommand changepasswordCommand = new ChangepasswordCommand(this, workers, storage, authState);
             getCommand("login").setExecutor(loginCommand);
             getCommand("login").setTabCompleter(loginCommand);
@@ -106,7 +107,7 @@ public final class LoginCore extends JavaPlugin {
             getCommand("changepassword").setExecutor(changepasswordCommand);
             getCommand("changepassword").setTabCompleter(changepasswordCommand);
             getServer().getPluginManager().registerEvents(
-                new PreAuthRestrictionListener(this, authState, storage, workers), this);
+                new PreAuthRestrictionListener(this, authState, storage, workers, premiumSupport::available), this);
             getLogger().info("login-core login verification is active in " + getConfig().getString("mode") + " mode.");
         } catch (SQLException | IOException ex) {
             getLogger().severe("login-core could not initialize required storage or encryption: " + ex.getMessage());

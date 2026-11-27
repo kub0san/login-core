@@ -1,6 +1,7 @@
 package com.hizeric.logincore.command;
 
 import com.hizeric.logincore.events.RegisterEvent;
+import com.hizeric.logincore.mojang.LookupResult;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -12,8 +13,11 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.function.BiFunction;
 
 public final class RegisterCommand implements CommandExecutor, TabCompleter {
 
@@ -21,13 +25,18 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
     private final Executor workers;
     private final Storage storage;
     private final AuthState authState;
+    private final String mode;
+    private final BiFunction<String, String, LookupResult> nameLookup;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
-    public RegisterCommand(JavaPlugin plugin, Executor workers, Storage storage, AuthState authState) {
+    public RegisterCommand(JavaPlugin plugin, Executor workers, Storage storage, AuthState authState,
+                           String mode, BiFunction<String, String, LookupResult> nameLookup) {
         this.plugin = plugin;
         this.workers = workers;
         this.storage = storage;
         this.authState = authState;
+        this.mode = mode;
+        this.nameLookup = nameLookup;
     }
 
     @Override
@@ -60,9 +69,21 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
     private void register(CommandSender sender, Player player, String password) {
         String name = player.getName();
         try {
-            if ("PREMIUM".equals(storage.classification(name).get().orElse(null))) {
+            String classification = storage.classification(name).get().orElse(null);
+            if ("PREMIUM".equalsIgnoreCase(classification)) {
                 onMain(() -> message(sender, "<red>Premium accounts do not use passwords."));
                 return;
+            }
+            if ("ENFORCE".equalsIgnoreCase(mode) && !"OFFLINE".equalsIgnoreCase(classification)) {
+                LookupResult result = nameLookup.apply(name, remoteIp(player));
+                if (result == null || !result.isNotPremium()) {
+                    String denial = result != null && result.isPremium()
+                        ? "<red>Premium accounts do not use passwords."
+                        : "<red>Unable to verify your account name. Try again later.";
+                    onMain(() -> message(sender, denial));
+                    return;
+                }
+                storage.setClassification(name, "OFFLINE").get();
             }
             if (!storage.registerPlayer(name, password).get()) {
                 onMain(() -> message(sender, "<red>That account is already registered. Use /login."));
@@ -77,6 +98,15 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
         } catch (Exception ex) {
             onMain(() -> message(sender, "<red>Registration failed: " + ex.getMessage()));
         }
+    }
+
+    private static String remoteIp(Player player) {
+        InetSocketAddress address = player.getAddress();
+        if (address == null) {
+            return null;
+        }
+        InetAddress inet = address.getAddress();
+        return inet == null ? address.getHostString() : inet.getHostAddress();
     }
 
     private void onMain(Runnable action) {
