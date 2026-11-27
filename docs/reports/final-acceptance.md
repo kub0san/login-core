@@ -1,5 +1,7 @@
 # Final Acceptance
 
+> **Superseded (2026-11-27):** This is a historical, point-in-time evidence report for the pre-hardening `standalone-password-auth` tree (`db78480`). It is retained verbatim as evidence; its Paper 26.3 production target, hard PacketEvents dependency, and exemption-era statements are no longer current. The authoritative post-hardening state — Paper 1.21.11+ baseline, optional PacketEvents, no exemptions, and the verified/unverified split — is in [2026-11-27-hardening-verification.md](./2026-11-27-hardening-verification.md).
+
 > Report for `docs/reports/final-acceptance.md`.
 > Evidence baseline: committed HEAD `db78480` (`docs: clarify compatibility and event contract`) on branch `standalone-password-auth` in worktree `C:\Projects\.worktrees\login-core-standalone`, with `792afd5 fix: close pre-auth password oracle and throttle bypass` committed. No push performed.
 > Criteria source: `docs/plans/full-implementation-handoff.md:69-92` (Phase G), cross-checked against the available final-acceptance outline at `C:\Projects\.worktrees\login-core-standalone\.superpowers\sdd\full-implementation-handoff\final-acceptance-outline.md`.

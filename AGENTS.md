@@ -4,17 +4,18 @@ Project-specific agent instructions for **login-core** (Paper authentication plu
 
 ## Platform
 
-- **Target/main server:** Paper **26.3** (Java 25). This is the production target. The **only local test server** is `C:\Tools\global-test-server-26.3` (Leaf 26.3-27, API `26.3.build.27-alpha`, Java 25, game port **25566**, offline/cracked, qcart-only player data, three restored loopback bridges); manage it with `TestServer.ps1` (see `../GLOBAL_TEST_SERVER.md`); use it for target testing. There is no local 1.21.11 server (retired 2026-11-23); older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
-- **Java:** 25 (toolchain). Emits Java 25 bytecode.
-- **Plugin name:** `AuthMe` (runtime name); package `com.hizeric.logincore`; command `/logincore`. PacketEvents 2.14.0 (spigot) for handshake/session work.
+- **Production baseline:** Paper **1.21.11+** (`paper-api:1.21.11-R0.1-SNAPSHOT`, `api-version: '1.21.11'`).
+- **Local/dev test server only:** `C:\Tools\global-test-server-26.3` (Leaf 26.3-27, API `26.3.build.27-alpha`, Java 25, game port **25566**, offline/cracked, qcart-only player data, three restored loopback bridges); manage it with `TestServer.ps1` (see `../GLOBAL_TEST_SERVER.md`). It is **not** Paper 1.21.11 E2E. There is no local 1.21.11 server (retired 2026-11-23) and no premium account, so live premium-handshake and live 1.21.11 E2E remain unverified. Older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
+- **Java:** 25 (toolchain) emits Java 25 bytecode; a Java 25 runtime is required even on Paper 1.21.11, which itself only requires Java 21. `plugin.yml` has no Java-version field, so document this in README/ADRs, not as a descriptor claim.
+- **Plugin name:** `AuthMe` (runtime name); package `com.hizeric.logincore`; command `/logincore`. PacketEvents 2.14.0 (spigot) is optional (`softdepend: [packetevents]`) and is used only for the premium handshake/session work.
 
 ## Build & run
 
 - Build: `./gradlew build`
 - Tests: `./gradlew test` (JUnit 5 present under src/test/java).
-- Run server: `./gradlew runServer` (pinned to `minecraftVersion("26.3")` in build.gradle.kts, matching the target).
+- Run server: `./gradlew runServer` (pinned to `minecraftVersion("26.3")` in build.gradle.kts). This is local/dev testing only — not Paper 1.21.11 E2E.
 - Compile only: `./gradlew compileJava`.
-- Test server (promoted path): from `C:\Tools\global-test-server-26.3`, run `.\TestServer.ps1 setup`, `status`, `verify`, `snapshot [name]`, `reset [name]` / `reset -Fresh`, `stop`; `-Help` prints the exact command table and MCP usage map. `restart` only proves log readiness; Craftwire `list_instances` → `server_info` + a real assertion is required before claiming a pass. Player data is qcart-only (UUID `befc5d95-fd63-4cae-b0f5-7c2fb271c699`, 4 files): non-`Fresh` `reset` preserves it; `reset -Fresh` intentionally does not. This branch is standalone: AuthMe / AuthMePAL are **not installed by default** on the test server (removed 2026-11-25), and deploy means building and copying the login-core shadow jar manually because `TestServer.ps1 deploy authmePAL` is broken after the rename. PacketEvents remains a hard plugin dependency.
+- Test server (promoted path): from `C:\Tools\global-test-server-26.3`, run `.\TestServer.ps1 setup`, `status`, `verify`, `snapshot [name]`, `reset [name]` / `reset -Fresh`, `stop`; `-Help` prints the exact command table and MCP usage map. `restart` only proves log readiness; Craftwire `list_instances` → `server_info` + a real assertion is required before claiming a pass. Player data is qcart-only (UUID `befc5d95-fd63-4cae-b0f5-7c2fb271c699`, 4 files): non-`Fresh` `reset` preserves it; `reset -Fresh` intentionally does not. This branch is standalone: AuthMe / AuthMePAL are **not installed by default** on the test server (removed 2026-11-25), and deploy means building and copying the login-core shadow jar manually because `TestServer.ps1 deploy authmePAL` is broken after the rename. PacketEvents is optional here too: password auth works without it.
 - Shared test server and Minecraft MCP usage: `../GLOBAL_TEST_SERVER.md` (the old `run/` dir was removed; copy the built jar into the global server's `plugins/`). When `qcart` is testing in-game and you need to act on their chat messages, use the qcart chat bridge (launch daemon, watch `qcart-inbox.jsonl`) — procedure in `../GLOBAL_TEST_SERVER.md`.
 
 ## Architecture
@@ -26,7 +27,7 @@ Project-specific agent instructions for **login-core** (Paper authentication plu
 
 - **UTF-8 encoding.** Windows PowerShell writes ASCII by default and corrupts characters like `§` into `?`.
   Write with explicit UTF-8; prefer the dedicated edit/write tools.
-- PacketEvents is a hard runtime dependency for handshake work; keep version in sync with Paper.
+- PacketEvents is optional/soft. Without it, password auth works; ENFORCE-mode new names require a PacketEvents-free Mojang lookup (NOT_PREMIUM only); stored PREMIUM identities fail closed (kick, no password fallback). Keep its version in sync with Paper when used.
 
 ## Agent notes
 

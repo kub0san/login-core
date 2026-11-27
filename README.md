@@ -25,8 +25,8 @@ login-core securely verifies Mojang account ownership on offline-mode Paper serv
 
 ## Requirements
 
-- Paper 26.3 and Java 25
-- PacketEvents 2.14.0 installed as a server plugin (the only hard plugin dependency)
+- Paper 1.21.11+ and a Java 25 runtime. The jar emits Java 25 bytecode, so Java 25 is required even on Paper 1.21.11 (which on its own would allow Java 21). `plugin.yml` has no Java-version field; the requirement is documented here and in the ADRs.
+- PacketEvents 2.14.0 is optional (`softdepend: [packetevents]`). Password login/registration works without it; only the premium-client handshake needs it.
 - `online-mode=false` in `server.properties`
 - Existing AuthMe SQLite `authme` rows are read for password verification; Argon2 hashes are rejected with a reset-password message
 
@@ -35,13 +35,13 @@ login-core is for a direct Paper server, not a proxy network. An offline-mode se
 ## Install and configure
 
 1. Back up the server and existing `plugins/AuthMe` data.
-2. Install PacketEvents, remove any old jar, and place `login-core-1.0-SNAPSHOT.jar` in the server's `plugins` directory. AuthMe does not need to be installed.
+2. Remove any old jar and place `login-core-1.0-SNAPSHOT.jar` in the server's `plugins` directory. AuthMe does not need to be installed. Install PacketEvents 2.14.0 only if you want automatic premium handshakes.
 3. Set `online-mode=false`.
 4. Start the server once to create `plugins/AuthMe/config.yml`. Dev installs that already have `plugins/AuthMe/data.db` (plus `-wal`/`-shm` siblings) must rename those files to `authme.db` before starting; the new database filename is `authme.db`.
 5. Start with `mode: SHADOW` and review the server log before enabling enforcement. SHADOW performs name lookups and logs decisions but does not start the premium handshake or block the login.
 6. After checking the intended behavior, change `mode` to `ENFORCE` and restart.
 
-The runtime plugin name is `AuthMe` (per ADR 0008), so this build uses the `plugins/AuthMe` data folder and `authme.db`. An existing AuthMe-shaped database is opened in place; back it up before upgrading. Previous `AuthMePAL` configuration and link/exemption data are not automatically imported — see [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
+The runtime plugin name is `AuthMe` (per ADR 0008), so this build uses the `plugins/AuthMe` data folder and `authme.db`. An existing AuthMe-shaped database is opened in place; back it up before upgrading. Previous `AuthMePAL` configuration is not automatically imported. Legacy AuthMe `premiumUUID` identities are imported once at startup into the classification/link tables; conflicts are skipped and reported, never overwritten. See [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
 
 The runtime `name: AuthMe` exists only for `plugins/AuthMe` data-folder continuity and downstream `depend: [AuthMe]` resolution. login-core provides no `AuthMeApi` façade and no binary compatibility with `fr.xephi.authme.events.*`; plugins using the AuthMe API or events must be rebuilt against login-core. `com.hizeric.logincore.events.LoginEvent` fires after successful password login and premium auto-login; `RegisterEvent` fires after `/register` and premium auto-registration.
 
@@ -49,7 +49,9 @@ The generated config controls Mojang lookup endpoints, lookup-failure behavior, 
 
 ### Premium UUID mode
 
-`use-premium-uuid` defaults to `true`. Successfully verified premium players use their Mojang UUID; cracked, exempt, and normal AuthMe logins keep Paper's offline UUID. This does not migrate existing player data: inventories and other plugin state stored under a premium player's former offline UUID may appear missing. Back up the server and plan any needed data conversion before deployment.
+`use-premium-uuid` defaults to `true`. Successfully verified premium players use their Mojang UUID; cracked and normal AuthMe logins keep Paper's offline UUID. This does not migrate existing player data: inventories and other plugin state stored under a premium player's former offline UUID may appear missing. Back up the server and plan any needed data conversion before deployment.
+
+Without PacketEvents there is no premium-client handshake: stored PREMIUM identities fail closed (the player is kicked, with no password fallback). In ENFORCE mode a new, unclassified name can only be registered after a PacketEvents-free Mojang lookup returns NOT_PREMIUM; a premium or unavailable lookup is refused.
 
 ### Existing AuthMe accounts
 
@@ -66,16 +68,13 @@ All commands require `logincore.admin` (default: operators). The command is `/lo
 
 ```text
 /logincore status [name]
-/logincore exempt add <name>
-/logincore exempt remove <name>
-/logincore exempt list
 /logincore migrate audit
-/logincore migrate apply --exempt-conflicts [--except name,name]
+/logincore migrate classify
 ```
 
-`migrate audit` checks registered names from the local `authme` table and writes a CSV under `plugins/AuthMe/migration/`; it does not change account state. `migrate apply --exempt-conflicts` exempts names classified as premium-name conflicts, optionally excluding the comma-separated names. Review the audit and keep a backup before applying changes. Actual migration of existing player UUID-keyed server data is not performed.
+`migrate audit` checks registered names from the local `authme` table and writes a CSV under `plugins/AuthMe/migration/`; `migrate classify` applies legacy classification from existing links. Neither command writes an exemption, and actual migration of player UUID-keyed server data is not performed. Review the audit and keep a backup before using either command.
 
-login-core stores links, exemptions and account state in `plugins/AuthMe/authme.db`.
+login-core stores links, classifications and account state in `plugins/AuthMe/authme.db`. Exemptions and the grandfather bypass are gone: there is no exemption command, table, or report field.
 
 ## Build and tests
 
@@ -88,7 +87,7 @@ The built plugin jar is in `build/libs/`. The automated suite covers the decisio
 
 ## Verification limits
 
-The user reports that the previous build's login features worked on their server. Premium UUID mode is new in this build and still needs a real join test; Paper profile propagation and compatibility with UUID-keyed plugins are not covered by automated tests. See [docs/SPIKE_RESULTS.md](./docs/SPIKE_RESULTS.md) and [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
+Automated verification for the hardening pass is recorded in [docs/reports/2026-11-27-hardening-verification.md](./docs/reports/2026-11-27-hardening-verification.md). A **live premium-client handshake is unverified** (no premium account available), and **live Paper 1.21.11 end-to-end testing is unverified** (no local 1.21.11 server; the pinned 26.3 `runServer` is a local/dev test server only). Paper profile propagation and compatibility with UUID-keyed plugins are likewise not covered by automated tests. See [docs/SPIKE_RESULTS.md](./docs/SPIKE_RESULTS.md) and [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
 
 ## Credits
 
