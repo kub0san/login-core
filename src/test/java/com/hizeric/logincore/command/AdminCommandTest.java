@@ -115,6 +115,40 @@ class AdminCommandTest {
     }
 
     @Test
+    void everyAdminSubcommandPreservesPremiumBaseline() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("premium-commands.db"))) {
+            storage.setClassification("PremiumGuy", "PREMIUM").get();
+            MigrationAudit audit = audit(storage, temporaryDirectory.resolve("premium-data"));
+            ExecutorService workers = Executors.newSingleThreadExecutor();
+            try {
+                AdminCommand command = new AdminCommand(TestPlugin.create(), storage, null,
+                    audit, workers, new LoginMetrics());
+                CommandSender sender = sender();
+                for (String[] args : new String[][]{
+                    {"status"},
+                    {"exempt", "add", "ExemptGuy"},
+                    {"exempt", "list"},
+                    {"exempt", "remove", "ExemptGuy"},
+                    {"migrate", "audit"},
+                    {"migrate", "classify"}
+                }) {
+                    assertTrue(command.onCommand(sender, null, "logincore", args));
+                    for (String variant : new String[]{"PremiumGuy", "PREMIUMGUY", "premiumguy"}) {
+                        assertEquals("PREMIUM", storage.classification(variant).get().orElseThrow(),
+                            Arrays.toString(args));
+                    }
+                    assertTrue(storage.classification("FreshGuy").get().isEmpty(), Arrays.toString(args));
+                }
+                assertEquals(1, storage.summary().get().classifications(),
+                    "no subcommand may add or change a classification row");
+            } finally {
+                workers.shutdownNow();
+                audit.close();
+            }
+        }
+    }
+
+    @Test
     void migrateClassifyOnlyWritesPremiumForLinkedNames() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("classify.db"))) {
             storage.putLink("LinkedGuy", UUID_TEXT, "LinkedGuy", "AUTO").get();

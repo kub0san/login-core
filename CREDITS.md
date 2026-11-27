@@ -35,7 +35,7 @@ wrappers depend on BouncyCastle, which login-core does not ship.
 | Project | Author | Licence | What was referenced |
 |---|---|---|---|
 | [FastLogin](https://github.com/games647/FastLogin) | games647 / TuxCoding | MIT | The overall premium-login sequence: hold the connection at `LOGIN_START`, prove ownership through Mojang's `hasJoined` endpoint, then continue the login. PLAN.md §4's flow diagram is explicitly an adaptation of FastLogin's. |
-| [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) | Xephi and contributors | GPL-3.0 | Behavioural reference for the packet-phase handshake (cancel → verify → re-inject `LOGIN_START`), the verify-token pattern, and how a premium account is registered and force-logged-in without a `Player` object. AuthMe's own premium bypass was studied only to confirm AuthMePAL must require `settings.enablePremium: false`. |
+| [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) | Xephi and contributors | GPL-3.0 | Behavioural reference for the packet-phase handshake (cancel → verify → re-inject `LOGIN_START`), the verify-token pattern, and how a premium account is registered and force-logged-in without a `Player` object. AuthMe's own premium bypass was studied only to confirm login-core (runtime plugin name `AuthMe`) must require `settings.enablePremium: false`. |
 | [Minecraft protocol documentation](https://wiki.vg/Protocol) | Mojang / community | — | The session-hash algorithm (`SHA-1(serverId + sharedSecret + publicKey)` rendered as signed hex), AES/CFB8 key = IV = shared secret, and the `LOGIN_START` / `ENCRYPTION_REQUEST` / `ENCRYPTION_RESPONSE` packet exchange. |
 | [LuckPerms](https://github.com/LuckPerms/LuckPerms) | LuckPerms contributors | MIT | Read to diagnose the pre-login permission-loading conflict. login-core applies the verified profile at `EventPriority.LOWEST` so that LuckPerms' `LOW` handler reads the correct UUID. No LuckPerms code is used. |
 
@@ -47,22 +47,22 @@ obligations are recorded in §1, §4 and the root [NOTICE](./NOTICE).
 ## 3. Dependencies
 
 Every item below is used as an **API or runtime dependency only**. None of them
-is compiled into, shaded into, or redistributed with the AuthMePAL jar.
+is compiled into, shaded into, or redistributed with the login-core (runtime plugin name `AuthMe`) jar.
 
 ### Compile-time (`compileOnly`)
 
 | Component | Version | Licence | How it is used |
 |---|---|---|---|
-| [PacketEvents](https://github.com/retrooper/packetevents) (`packetevents-spigot`) | 2.14.0 | GPL-3.0 | Installed as a separate server plugin. AuthMePAL calls its login-phase packet listeners and wrappers. Not bundled. |
+| [PacketEvents](https://github.com/retrooper/packetevents) (`packetevents-spigot`) | 2.14.0 | GPL-3.0 | Installed as a separate server plugin. login-core (runtime plugin name `AuthMe`) calls its login-phase packet listeners and wrappers. Not bundled. |
 | [Paper API](https://papermc.io/) (`paper-api`) | 26.3 | See [PaperMC's licence](https://papermc.io/license) | Server API: plugin lifecycle, events, player profiles. |
 | Gson | provided by server | Apache-2.0 | JSON parsing for Mojang responses. |
 | Netty | provided by server | Apache-2.0 | Cipher handlers installed into the login channel pipeline. |
 
 ### Runtime (server-side, optional/indirect)
 
-| Component | Licence | Relationship to AuthMePAL |
+| Component | Licence | Relationship to login-core (runtime plugin name `AuthMe`) |
 |---|---|---|
-| [LuckPerms](https://github.com/LuckPerms/LuckPerms) | MIT | Optional. AuthMePAL does not depend on it; it only orders its own event handler so LuckPerms loads permissions under the correct UUID. |
+| [LuckPerms](https://github.com/LuckPerms/LuckPerms) | MIT | Optional. login-core (runtime plugin name `AuthMe`) does not depend on it; it only orders its own event handler so LuckPerms loads permissions under the correct UUID. |
 | SQLite JDBC | Apache-2.0 | Backing store for `authme.db`, obtained through Paper's library resolver. |
 | MiniMessage | MIT | Message formatting, provided by Paper. |
 
@@ -72,7 +72,7 @@ JUnit 5 (EPL-2.0), Netty (Apache-2.0), Gson (Apache-2.0), SQLite JDBC (Apache-2.
 
 ---
 
-## 4. Licence of AuthMePAL itself
+## 4. Licence of login-core (runtime plugin name `AuthMe`) itself
 
 login-core (runtime plugin name `AuthMe`) is licensed under the **GNU General
 Public License v3.0 (GPL-3.0)**, inherited from AuthMeReloaded as recorded in

@@ -1,6 +1,8 @@
 package com.hizeric.logincore.authme;
 
 import com.hizeric.logincore.events.LoginEvent;
+import com.hizeric.logincore.events.RegisterEvent;
+import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
@@ -50,7 +52,13 @@ public final class AuthMeLoginListener implements Listener {
         this(plugin, authState, storage, verifiedSessions, onVerifiedLogin,
             name -> storage.setLoggedIn(name).join(),
             name -> storage.isRegistered(name).join(),
-            (name, password) -> storage.registerPlayer(name, password).join());
+            (name, password) -> {
+                if (!storage.registerPlayer(name, password).join()) {
+                    return false;
+                }
+                storage.setLoggedIn(name).join();
+                return true;
+            });
     }
 
     AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
@@ -153,6 +161,8 @@ public final class AuthMeLoginListener implements Listener {
         } catch (RuntimeException ex) {
             plugin.getLogger().severe("Login verification rejected the verified login for "
                 + event.getName() + ": " + ex.getMessage());
+            // A pre-login kick gets no PlayerQuitEvent, so clear any authentication set before the failure.
+            authState.logout(event.getName());
             event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
                 "Authentication could not be completed. Please try again later.");
         }
@@ -160,6 +170,14 @@ public final class AuthMeLoginListener implements Listener {
 
     /** Write-once PREMIUM classification + link in one transaction; never grants by itself. */
     private CommitResult commitIdentity(VerifiedSession session) {
+        MojangClient.SessionResult verification = session.mojangSession();
+        if (verification.status() != MojangClient.SessionStatus.VERIFIED
+            || verification.uuid() == null
+            || verification.canonicalName() == null || verification.canonicalName().isBlank()) {
+            plugin.getLogger().warning("Refusing identity commit for " + session.name()
+                + ": Mojang session is not verified");
+            return CommitResult.CONFLICT;
+        }
         try {
             String mojangUuid = session.mojangSession().uuid().toString();
             if (session.link().isEmpty()) {
@@ -191,18 +209,27 @@ public final class AuthMeLoginListener implements Listener {
             return;
         }
         String name = player.getName();
+        // Consume intent before the ban check so a rejected join cannot leave stale registration intent.
+        String password = pendingRegistrations.remove(registrationKey(name, event.getAddress()));
         if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
             authState.logout(name);
             return;
         }
-        String password = pendingRegistrations.remove(registrationKey(name, event.getAddress()));
         if (password == null) {
+            // Pre-authenticated premium auto-login: no registration, and the password hook is not used.
+            if (authState.isAuthenticated(name)) {
+                plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
+            }
             return;
         }
         if (!register.test(name, password)) {
             plugin.getLogger().severe("Could not prepare the account for " + name);
             event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("account-conflict"));
+            authState.logout(name);
+            return;
         }
+        plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
+        plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
     }
 
     /**
@@ -210,7 +237,9 @@ public final class AuthMeLoginListener implements Listener {
      * sessions survive pre-login; commit their identity first, and only then release. A failed commit
      * kicks instead. Auto-login sessions were consumed at pre-login, so this is one-shot.
      *
-     * @return false when the player was kicked, true after the verified grant
+     * @return false when the player was kicked; true when the caller may complete the grant. On the
+     *         no-pending path the password has already been checked by the caller and its grant is
+     *         completed there; only the password-once path is fully granted here.
      */
     public boolean onPasswordLogin(Player player) {
         if (player == null) {
@@ -232,6 +261,7 @@ public final class AuthMeLoginListener implements Listener {
             plugin.getLogger().severe("Premium identity for " + session.name()
                 + " could not be persisted after password login; refusing to release.");
             player.kick(message("account-conflict"));
+            authState.logout(player.getName());
             return false;
         }
         authState.authenticate(player.getName());

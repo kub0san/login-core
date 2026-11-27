@@ -11,7 +11,7 @@ Three contradictions blocked progress:
 
 ## Decision
 
-**Identity.** Keep runtime plugin name `AuthMe` (preserves `plugins/AuthMe` data folder, `AuthMeApi` singleton, downstream `depend: [AuthMe]`). Repository/artifact/group remain `login-core`/`com.hizeric.logincore`. Package own code `com.hizeric.logincore`; keep vendored `fr.xephi.*` packages intact for attribution and small diff. Update `plugin.yml` `name: AuthMe`, `main: com.hizeric.logincore.LoginCore`, `depend: [packetevents]` (drop AuthMe once vendored). Remove the `AuthMePAL` name from code/config.
+**Identity.** Keep runtime plugin name `AuthMe` (preserves `plugins/AuthMe` data folder and downstream `depend: [AuthMe]` semantics; no `AuthMeApi` singleton is provided). Repository/artifact/group remain `login-core`/`com.hizeric.logincore`. Package own code `com.hizeric.logincore`; no `fr.xephi.*` source is vendored — provenance is recorded in `NOTICE`, where BCrypt attribution also remains. Update `plugin.yml` `name: AuthMe`, `main: com.hizeric.logincore.LoginCore`, `depend: [packetevents]` (drop AuthMe once vendored). Remove the `AuthMePAL` name from code/config.
 
 **Licensing.** login-core is GPL-3.0 (inherited from AuthMeReloaded). Vendoring GPL-3.0 source is permitted and requires: retaining upstream copyright headers and LICENSE, adding a NOTICE/PROVENANCE file recording upstream repo + exact commit SHA + modified files, updating CREDITS.md to acknowledge vendored source (remove "no source copied" claim). No relicensing.
 
@@ -20,7 +20,7 @@ Three contradictions blocked progress:
 ## Consequences
 
 - Data folder stays `plugins/AuthMe`; existing AuthMe SQLite data preserved (Phase 7 compat).
-- Downstream `depend: [AuthMe]` plugins keep working.
+- The `AuthMe` name preserves the `plugins/AuthMe` data folder and `depend: [AuthMe]` resolution semantics for downstream plugins; no `AuthMeApi` singleton or binary AuthMe event compatibility is provided.
 - CREDITS.md and LICENSE must be updated before any vendored source is committed.
 - Vendoring scope capped; full fork deferred indefinitely.
 - ADR 0002 amended by this ADR (identity section superseded; compat section retained).

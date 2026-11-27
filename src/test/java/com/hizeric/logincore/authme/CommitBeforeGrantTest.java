@@ -287,6 +287,43 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void invalidVerificationNeverAuthenticatesOnPasswordLogin() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("invalid-verification.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(invalidVerificationSession());
+            AuthState authState = new AuthState();
+            List<String> released = new ArrayList<>();
+            List<String> kicks = new ArrayList<>();
+            AuthMeLoginListener listener = listener(authState, storage, sessions, released::add,
+                name -> { }, name -> true, (name, password) -> true);
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertTrue(storage.classification("Notch").get().isEmpty(),
+                "REQUIRE_PASSWORD_ONCE must not commit classification before the password");
+            assertTrue(storage.link("Notch").get().isEmpty(),
+                "REQUIRE_PASSWORD_ONCE must not commit a link before the password");
+
+            assertFalse(listener.onPasswordLogin(player(kicks)),
+                "a NOT_VERIFIED session must never authenticate via password login");
+            assertFalse(kicks.isEmpty(), "an invalid session must kick the player, not authenticate them");
+            assertTrue(released.isEmpty(), "an invalid session must never reach the release/grant hook");
+            assertFalse(authState.isAuthenticated("notch"),
+                "an invalid session must never mark the player authenticated");
+            assertTrue(TestPlugin.firedEvents().stream().noneMatch(fired -> fired instanceof LoginEvent),
+                "an invalid session must never fire the compatibility LoginEvent");
+            assertTrue(storage.classification("Notch").get().isEmpty(),
+                "an invalid session must not leave a PREMIUM classification behind");
+            assertTrue(storage.link("Notch").get().isEmpty(),
+                "an invalid session must not leave a link behind");
+            assertTrue(sessions.find("Notch", event.getAddress()).isEmpty(),
+                "the session must be consumed one-shot");
+        }
+    }
+
+    @Test
     void registrationHappensOnlyAfterCommit() throws Exception {
         Storage storage = new Storage(temporaryDirectory.resolve("register.db"));
         storage.close();
@@ -366,6 +403,40 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void rejectedJoinClearsPendingRegistrationIntent() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("rejected-join.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            List<String> registrations = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, ignored -> { }, ignored -> { },
+                name -> false, (name, password) -> {
+                    registrations.add(name);
+                    return true;
+                });
+            AsyncPlayerPreLoginEvent preLogin = event();
+
+            listener.onAsyncPreLogin(preLogin);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
+            assertTrue(registrations.isEmpty(), "registration is deferred past the login check");
+
+            PlayerLoginEvent rejected = loginEvent();
+            rejected.disallow(PlayerLoginEvent.Result.KICK_BANNED, "banned");
+            listener.onPlayerLogin(rejected);
+            assertTrue(registrations.isEmpty());
+
+            List<String> kicks = new ArrayList<>();
+            PlayerLoginEvent retry = new PlayerLoginEvent(player(kicks), "127.0.0.1",
+                InetAddress.getByName("127.0.0.1"));
+            listener.onPlayerLogin(retry);
+
+            assertEquals(PlayerLoginEvent.Result.ALLOWED, retry.getResult());
+            assertTrue(kicks.isEmpty(), kicks.toString());
+            assertTrue(registrations.isEmpty(), "a rejected join must not leave a stale registration intent");
+        }
+    }
+
+    @Test
     void loginRegistrationFailureDisallows() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("login-fail.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
@@ -383,6 +454,32 @@ class CommitBeforeGrantTest {
     }
 
     @Test
+    void registrationFailureClearsAuthenticatedState() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("register-fail-auth-state.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = listener(authState, storage, sessions, ignored -> { }, ignored -> { },
+                name -> false, (name, password) -> false);
+            AsyncPlayerPreLoginEvent preLogin = event();
+
+            listener.onAsyncPreLogin(preLogin);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
+            assertTrue(authState.isAuthenticated("Notch"), "pre-login authenticates before the login check");
+
+            PlayerLoginEvent login = loginEvent();
+            listener.onPlayerLogin(login);
+
+            assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
+            assertFalse(authState.isAuthenticated("Notch"),
+                "a player kicked at login must not keep stale in-memory authentication");
+            assertTrue(TestPlugin.firedEvents().stream().noneMatch(fired -> fired instanceof LoginEvent),
+                "a failed registration must not fire the compatibility LoginEvent");
+        }
+    }
+
+    @Test
     void autoLoginGrantMarksPlayerAuthenticated() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("auto-auth-state.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
@@ -393,6 +490,24 @@ class CommitBeforeGrantTest {
                 .onAsyncPreLogin(event());
 
             assertTrue(authState.isAuthenticated("notch"));
+        }
+    }
+
+    @Test
+    void grantFailureClearsAuthenticatedState() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("grant-fail-auth-state.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session());
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = listener(authState, storage, sessions, ignored -> { },
+                name -> { throw new RuntimeException("grant failed"); });
+            AsyncPlayerPreLoginEvent event = event();
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
+            assertFalse(authState.isAuthenticated("Notch"),
+                "a player kicked at pre-login must not keep stale in-memory authentication");
         }
     }
 
@@ -497,6 +612,22 @@ class CommitBeforeGrantTest {
 
     private static VerifiedSession passwordOnceSession() {
         return session(false, true);
+    }
+
+    private static VerifiedSession invalidVerificationSession() {
+        return new VerifiedSession(
+            "connection",
+            "Notch",
+            "127.0.0.1",
+            new MojangClient.SessionResult(MojangClient.SessionStatus.NOT_VERIFIED,
+                UUID.fromString(UUID_TEXT), "Notch", "not-verified"),
+            Optional.empty(),
+            false,
+            false,
+            true,
+            false,
+            "PASSWORD_ONCE"
+        );
     }
 
     private static VerifiedSession session(boolean shouldRegister, boolean requiresPasswordOnce) {

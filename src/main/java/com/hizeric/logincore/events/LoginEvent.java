@@ -4,7 +4,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Event;
 import org.bukkit.event.HandlerList;
 
-/** Fired after a successful password login, for downstream plugins that listened for AuthMe's login event. */
+/** Fired after a successful login, for downstream plugins that listened for AuthMe's login event. */
 public final class LoginEvent extends Event {
 
     private static final HandlerList HANDLERS = new HandlerList();

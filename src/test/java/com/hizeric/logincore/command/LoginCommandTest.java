@@ -10,6 +10,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -49,7 +53,7 @@ class LoginCommandTest {
     }
 
     @Test
-    void rejectedPasswordHookSkipsGrantAndSuccessMessage() {
+    void rejectedPasswordHookSkipsGrantAndSuccessMessage() throws Exception {
         Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
         LoginCommand hooked = new LoginCommand(TestPlugin.create(), Runnable::run, storage, state,
             candidate -> false);
@@ -58,6 +62,22 @@ class LoginCommandTest {
 
         assertFalse(state.isAuthenticated("offlineguy"));
         assertTrue(player.transcript().isEmpty(), player.transcript());
+        assertEquals(0, loggedFlag("OfflineGuy"),
+            "a rejected password hook must not leave the authme row flagged as logged in");
+    }
+
+    private int loggedFlag(String name) throws Exception {
+        Class.forName("org.sqlite.JDBC");
+        try (Connection connection = DriverManager.getConnection(
+                "jdbc:sqlite:" + temporaryDirectory.resolve("login.db").toAbsolutePath());
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT isLogged FROM authme WHERE username = ? COLLATE NOCASE")) {
+            statement.setString(1, name);
+            try (ResultSet result = statement.executeQuery()) {
+                assertTrue(result.next(), "authme row must exist for " + name);
+                return result.getInt("isLogged");
+            }
+        }
     }
 
     @Test

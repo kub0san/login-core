@@ -56,7 +56,7 @@ The generated config controls Mojang lookup endpoints, lookup-failure behavior, 
 - `REQUIRE_PASSWORD_ONCE` (default): the owner must complete one `/login` with their existing password; login-core saves the link only after that succeeds.
 - `DENY`: reject the verified premium login until an administrator resolves the account.
 
-Newly encountered premium identities are registered with AuthMe and auto-logged-in using an automatically generated password the player does not know. If Mojang verification is unavailable they cannot use a password fallback; administrators must use AuthMe's supported password-reset process if recovery is needed.
+Newly encountered premium identities are registered locally in `plugins/AuthMe/authme.db` and auto-logged-in using an automatically generated password the player does not know. If Mojang verification is unavailable they have no password fallback, and administrators must resolve the account locally — for example, by editing the database only with a backup, or by removing the account row and letting the player re-register through the supported flow where applicable.
 
 ## Administration
 

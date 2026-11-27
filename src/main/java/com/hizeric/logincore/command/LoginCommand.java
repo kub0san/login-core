@@ -71,6 +71,15 @@ public final class LoginCommand implements CommandExecutor, TabCompleter {
                 storage.setLoggedIn(name).get();
                 onMain(() -> {
                     if (!onPasswordLogin.test(player)) {
+                        // The DB flag was set before the in-memory grant; undo it off the main thread.
+                        workers.execute(() -> {
+                            try {
+                                storage.setLoggedOut(name).join();
+                            } catch (RuntimeException ex) {
+                                plugin.getLogger().warning("Could not roll back login flag for "
+                                    + name + ": " + ex.getMessage());
+                            }
+                        });
                         return;
                     }
                     failures.remove(name);
