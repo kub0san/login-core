@@ -3,7 +3,7 @@ version: '${version}'
 main: com.hizeric.logincore.LoginCore
 description: Securely verifies Mojang account ownership and automates AuthMe logins on offline-mode Paper servers.
 authors: [hizeric]
-api-version: '26.3'
+api-version: '1.21.11'
 load: POSTWORLD
 depend: [packetevents]
 libraries:
