@@ -69,8 +69,11 @@ public final class LoginCommand implements CommandExecutor, TabCompleter {
             }
             if (storage.verifyPassword(name, password).get()) {
                 storage.setLoggedIn(name).get();
+                // The hook may commit an identity and hash a password; run it off main, then use
+                // its result in the main callback.
+                boolean granted = onPasswordLogin.test(player);
                 onMain(() -> {
-                    if (!onPasswordLogin.test(player)) {
+                    if (!granted) {
                         // The DB flag was set before the in-memory grant; undo it off the main thread.
                         workers.execute(() -> {
                             try {

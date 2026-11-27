@@ -2,6 +2,7 @@ package com.hizeric.logincore.authme;
 
 import com.hizeric.logincore.TestPlugin;
 import com.hizeric.logincore.events.LoginEvent;
+import com.hizeric.logincore.events.RegisterEvent;
 import com.hizeric.logincore.mojang.MojangClient;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
@@ -25,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
@@ -365,40 +367,40 @@ class CommitBeforeGrantTest {
             listener.onAsyncPreLogin(event);
 
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
-            assertTrue(registrations.isEmpty(), "registration is deferred until the login check");
+            assertEquals(List.of("Notch"), registrations, "registration runs on the pre-login worker");
+            assertTrue(committedAtRegistration.get(), "registration must observe the committed identity");
             assertEquals(List.of("Notch"), grants);
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "events wait for PlayerLoginEvent");
 
             listener.onPlayerLogin(loginEvent());
 
-            assertEquals(List.of("Notch"), registrations);
-            assertTrue(committedAtRegistration.get(), "registration must observe the committed identity");
+            assertEquals(List.of("Notch"), registrations, "PlayerLoginEvent must not register again");
+            assertEquals(2, TestPlugin.firedEvents().size());
         }
     }
 
     @Test
-    void bannedPlayerIsNotRegistered() throws Exception {
+    void bannedPreLoginDoesNotRegister() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("banned.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(session(true, false));
             List<String> registrations = new ArrayList<>();
             List<String> grants = new ArrayList<>();
-            AuthMeLoginListener listener = listener(storage, sessions, ignored -> { }, grants::add,
-                name -> false, (name, password) -> {
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = new AuthMeLoginListener(plugin(), authState, storage, sessions,
+                ignored -> { }, grants::add, name -> false, (name, password) -> {
                     registrations.add(name);
                     return true;
-                });
+                }, (name, address) -> true, Runnable::run);
             AsyncPlayerPreLoginEvent event = event();
 
             listener.onAsyncPreLogin(event);
 
-            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
-            assertTrue(registrations.isEmpty(), "registration is deferred past the login check");
-
-            PlayerLoginEvent login = loginEvent();
-            login.disallow(PlayerLoginEvent.Result.KICK_BANNED, "banned");
-            listener.onPlayerLogin(login);
-
-            assertTrue(registrations.isEmpty(), "a player rejected by the ban check must have no AuthMe account");
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, event.getLoginResult());
+            assertTrue(registrations.isEmpty(), "a banned player must never reach registration");
+            assertTrue(grants.isEmpty());
+            assertFalse(authState.isAuthenticated("notch"));
+            assertTrue(TestPlugin.firedEvents().isEmpty());
         }
     }
 
@@ -418,26 +420,25 @@ class CommitBeforeGrantTest {
             listener.onAsyncPreLogin(preLogin);
 
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
-            assertTrue(registrations.isEmpty(), "registration is deferred past the login check");
+            assertEquals(List.of("Notch"), registrations);
 
             PlayerLoginEvent rejected = loginEvent();
             rejected.disallow(PlayerLoginEvent.Result.KICK_BANNED, "banned");
             listener.onPlayerLogin(rejected);
-            assertTrue(registrations.isEmpty());
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "a rejected join must not fire compatibility events");
 
-            List<String> kicks = new ArrayList<>();
-            PlayerLoginEvent retry = new PlayerLoginEvent(player(kicks), "127.0.0.1",
+            PlayerLoginEvent retry = new PlayerLoginEvent(player(new ArrayList<>()), "127.0.0.1",
                 InetAddress.getByName("127.0.0.1"));
             listener.onPlayerLogin(retry);
 
             assertEquals(PlayerLoginEvent.Result.ALLOWED, retry.getResult());
-            assertTrue(kicks.isEmpty(), kicks.toString());
-            assertTrue(registrations.isEmpty(), "a rejected join must not leave a stale registration intent");
+            assertEquals(List.of("Notch"), registrations, "no duplicate registration on retry");
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "a rejected join must not leave a stale event marker");
         }
     }
 
     @Test
-    void loginRegistrationFailureDisallows() throws Exception {
+    void registrationFailureDisallowsAtPreLogin() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("login-fail.db"))) {
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(session(true, false));
@@ -446,10 +447,9 @@ class CommitBeforeGrantTest {
             AsyncPlayerPreLoginEvent event = event();
             listener.onAsyncPreLogin(event);
 
-            PlayerLoginEvent login = loginEvent();
-            listener.onPlayerLogin(login);
-
-            assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
+            listener.onPlayerLogin(loginEvent());
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "a failed registration must not fire events");
         }
     }
 
@@ -465,15 +465,9 @@ class CommitBeforeGrantTest {
 
             listener.onAsyncPreLogin(preLogin);
 
-            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
-            assertTrue(authState.isAuthenticated("Notch"), "pre-login authenticates before the login check");
-
-            PlayerLoginEvent login = loginEvent();
-            listener.onPlayerLogin(login);
-
-            assertEquals(PlayerLoginEvent.Result.KICK_OTHER, login.getResult());
+            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, preLogin.getLoginResult());
             assertFalse(authState.isAuthenticated("Notch"),
-                "a player kicked at login must not keep stale in-memory authentication");
+                "a registration failure must not leave stale in-memory authentication");
             assertTrue(TestPlugin.firedEvents().stream().noneMatch(fired -> fired instanceof LoginEvent),
                 "a failed registration must not fire the compatibility LoginEvent");
         }
@@ -526,6 +520,97 @@ class CommitBeforeGrantTest {
         }
     }
 
+    @Test
+    void registrationHappensOnPreLoginWorker() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("worker.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session(true, false));
+            List<String> registrationThreads = new ArrayList<>();
+            AuthMeLoginListener listener = new AuthMeLoginListener(plugin(), new AuthState(), storage, sessions,
+                ignored -> { }, ignored -> { }, name -> false, (name, password) -> {
+                    registrationThreads.add(Thread.currentThread().getName());
+                    return true;
+                }, (name, address) -> false, Runnable::run);
+            AsyncPlayerPreLoginEvent event = event();
+
+            Thread worker = new Thread(() -> listener.onAsyncPreLogin(event), "pre-login-worker");
+            worker.start();
+            worker.join();
+
+            assertEquals(List.of("pre-login-worker"), registrationThreads);
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "events must wait for PlayerLoginEvent");
+
+            listener.onPlayerLogin(loginEvent());
+
+            assertEquals(List.of("pre-login-worker"), registrationThreads, "onPlayerLogin must not register");
+            assertEquals(1, TestPlugin.firedEvents().stream().filter(RegisterEvent.class::isInstance).count());
+            assertEquals(1, TestPlugin.firedEvents().stream().filter(LoginEvent.class::isInstance).count());
+        }
+    }
+
+    @Test
+    void passwordOnceCommitRunsOnCallingThreadAndSchedulesMainCallbacks() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("password-once-main.db"))) {
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(passwordOnceSession());
+            List<Runnable> mainCallbacks = new ArrayList<>();
+            AuthState authState = new AuthState();
+            AuthMeLoginListener listener = new AuthMeLoginListener(plugin(), authState, storage, sessions,
+                ignored -> { }, ignored -> { }, name -> true, (name, password) -> true,
+                (name, address) -> false, mainCallbacks::add);
+            List<String> kicks = new ArrayList<>();
+            AtomicReference<String> callerThread = new AtomicReference<>();
+            AtomicReference<String> classification = new AtomicReference<>();
+            AtomicBoolean granted = new AtomicBoolean();
+
+            Thread worker = new Thread(() -> {
+                callerThread.set(Thread.currentThread().getName());
+                granted.set(listener.onPasswordLogin(player(kicks)));
+                classification.set(storage.classification("Notch").join().orElse(null));
+            }, "password-worker");
+            worker.start();
+            worker.join();
+
+            assertTrue(granted.get());
+            assertEquals("password-worker", callerThread.get());
+            assertEquals("PREMIUM", classification.get(), "commit must finish on the calling thread");
+            assertEquals(3, mainCallbacks.size(), "auth state, release and event must be queued for main");
+            assertFalse(authState.isAuthenticated("notch"), "no auth side effect before main callbacks run");
+            assertTrue(kicks.isEmpty(), kicks.toString());
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "events must not fire on the worker thread");
+
+            mainCallbacks.forEach(Runnable::run);
+
+            assertTrue(authState.isAuthenticated("notch"));
+            assertTrue(kicks.isEmpty(), kicks.toString());
+            assertEquals(1, TestPlugin.firedEvents().stream().filter(LoginEvent.class::isInstance).count());
+        }
+    }
+
+    @Test
+    void passwordOnceCommitFailureQueuesKickAndLogout() throws Exception {
+        Storage storage = new Storage(temporaryDirectory.resolve("password-once-main-fail.db"));
+        storage.close();
+        VerifiedSessions sessions = new VerifiedSessions();
+        sessions.put(passwordOnceSession());
+        List<Runnable> mainCallbacks = new ArrayList<>();
+        AuthState authState = new AuthState();
+        AuthMeLoginListener listener = new AuthMeLoginListener(plugin(), authState, storage, sessions,
+            ignored -> { }, ignored -> { }, name -> true, (name, password) -> true,
+            (name, address) -> false, mainCallbacks::add);
+        List<String> kicks = new ArrayList<>();
+
+        assertFalse(listener.onPasswordLogin(player(kicks)));
+        assertEquals(2, mainCallbacks.size(), "kick and logout must be queued for main");
+        assertTrue(kicks.isEmpty(), kicks.toString());
+
+        mainCallbacks.forEach(Runnable::run);
+
+        assertEquals(1, kicks.size());
+        assertFalse(authState.isAuthenticated("notch"));
+        assertTrue(TestPlugin.firedEvents().stream().noneMatch(fired -> fired instanceof LoginEvent));
+    }
+
     private static PlayerLoginEvent loginEvent() throws Exception {
         return new PlayerLoginEvent(player(), "127.0.0.1", InetAddress.getByName("127.0.0.1"));
     }
@@ -557,7 +642,8 @@ class CommitBeforeGrantTest {
                                                 Consumer<String> released, Consumer<String> grant,
                                                 Predicate<String> isRegistered,
                                                 BiPredicate<String, String> register) {
-        return new AuthMeLoginListener(plugin(), authState, storage, sessions, released, grant, isRegistered, register);
+        return new AuthMeLoginListener(plugin(), authState, storage, sessions, released, grant, isRegistered, register,
+            (name, address) -> false, Runnable::run);
     }
 
     private static AsyncPlayerPreLoginEvent event() throws Exception {

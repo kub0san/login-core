@@ -14,6 +14,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -64,6 +69,27 @@ class LoginCommandTest {
         assertTrue(player.transcript().isEmpty(), player.transcript());
         assertEquals(0, loggedFlag("OfflineGuy"),
             "a rejected password hook must not leave the authme row flagged as logged in");
+    }
+
+    @Test
+    void passwordHookIsInvokedOffMainThread() throws Exception {
+        ExecutorService workers = Executors.newSingleThreadExecutor(task -> new Thread(task, "login-worker"));
+        try {
+            AtomicReference<String> hookThread = new AtomicReference<>();
+            CountDownLatch hookCalled = new CountDownLatch(1);
+            LoginCommand offloaded = new LoginCommand(TestPlugin.create(), workers, storage, state, candidate -> {
+                hookThread.set(Thread.currentThread().getName());
+                hookCalled.countDown();
+                return true;
+            });
+            Recorder player = PasswordCommandTestSupport.player("OfflineGuy");
+
+            assertTrue(offloaded.onCommand(player.player(), null, "login", new String[]{"secret12"}));
+            assertTrue(hookCalled.await(5, TimeUnit.SECONDS), "the password hook must run on the worker");
+            assertEquals("login-worker", hookThread.get());
+        } finally {
+            workers.shutdownNow();
+        }
     }
 
     private int loggedFlag(String name) throws Exception {

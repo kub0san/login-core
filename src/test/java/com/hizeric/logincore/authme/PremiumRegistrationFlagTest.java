@@ -51,6 +51,9 @@ class PremiumRegistrationFlagTest {
             AsyncPlayerPreLoginEvent preLogin = preLoginEvent();
             listener.onAsyncPreLogin(preLogin);
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
+            assertEquals(1, loggedFlag(database),
+                "the DB login flag must be set during pre-login, not at PlayerLoginEvent");
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "events wait for PlayerLoginEvent");
 
             List<String> kicks = new ArrayList<>();
             PlayerLoginEvent login = new PlayerLoginEvent(player(kicks), "127.0.0.1",
@@ -86,6 +89,7 @@ class PremiumRegistrationFlagTest {
             listener.onAsyncPreLogin(preLogin);
             assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, preLogin.getLoginResult());
             assertTrue(authState.isAuthenticated(NAME), "auto-login must authenticate in memory");
+            assertTrue(TestPlugin.firedEvents().isEmpty(), "LoginEvent waits for PlayerLoginEvent");
 
             List<String> kicks = new ArrayList<>();
             PlayerLoginEvent login = new PlayerLoginEvent(player(kicks), "127.0.0.1",

@@ -9,6 +9,7 @@ import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.minimessage.MiniMessage;
+import org.bukkit.BanList;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -22,8 +23,8 @@ import java.net.InetAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.RejectedExecutionException;
@@ -41,9 +42,10 @@ public final class AuthMeLoginListener implements Listener {
     private final Consumer<String> grant;
     private final Predicate<String> isRegistered;
     private final BiPredicate<String, String> register;
-    // Registration intent survives from the async pre-login commit to the synchronous login
-    // check so a player rejected by Bukkit's ban check never gets an account.
-    private final Map<String, String> pendingRegistrations = new ConcurrentHashMap<>();
+    private final BiPredicate<String, InetAddress> isBanned;
+    private final Consumer<Runnable> onMain;
+    // Registration is committed at pre-login; only an event marker survives to PlayerLoginEvent.
+    private final Set<String> pendingRegistrations = ConcurrentHashMap.newKeySet();
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
@@ -58,18 +60,26 @@ public final class AuthMeLoginListener implements Listener {
                 }
                 storage.setLoggedIn(name).join();
                 return true;
-            });
+            }, bukkitBanCheck(plugin), mainThreadExecutor(plugin));
     }
 
     AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
                         Consumer<String> onVerifiedLogin, Consumer<String> grant) {
         this(plugin, authState, storage, verifiedSessions, onVerifiedLogin, grant, name -> true,
-            (name, password) -> true);
+            (name, password) -> true, bukkitBanCheck(plugin), mainThreadExecutor(plugin));
     }
 
     AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
                         Consumer<String> onVerifiedLogin, Consumer<String> grant,
                         Predicate<String> isRegistered, BiPredicate<String, String> register) {
+        this(plugin, authState, storage, verifiedSessions, onVerifiedLogin, grant, isRegistered, register,
+            bukkitBanCheck(plugin), mainThreadExecutor(plugin));
+    }
+
+    AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage, VerifiedSessions verifiedSessions,
+                        Consumer<String> onVerifiedLogin, Consumer<String> grant,
+                        Predicate<String> isRegistered, BiPredicate<String, String> register,
+                        BiPredicate<String, InetAddress> isBanned, Consumer<Runnable> onMain) {
         this.plugin = plugin;
         this.authState = authState;
         this.storage = storage;
@@ -78,6 +88,25 @@ public final class AuthMeLoginListener implements Listener {
         this.grant = grant;
         this.isRegistered = isRegistered;
         this.register = register;
+        this.isBanned = isBanned;
+        this.onMain = onMain;
+    }
+
+    private static BiPredicate<String, InetAddress> bukkitBanCheck(Plugin plugin) {
+        return (name, address) -> {
+            BanList bans = plugin.getServer().getBanList(BanList.Type.NAME);
+            return bans != null && bans.isBanned(name);
+        };
+    }
+
+    private static Consumer<Runnable> mainThreadExecutor(Plugin plugin) {
+        return task -> {
+            if (!plugin.isEnabled()) {
+                task.run();
+                return;
+            }
+            plugin.getServer().getScheduler().runTask(plugin, task);
+        };
     }
 
     /**
@@ -118,6 +147,11 @@ public final class AuthMeLoginListener implements Listener {
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
             return;
         }
+        if (isBanned.test(event.getName(), event.getAddress())) {
+            authState.logout(event.getName());
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_BANNED, "You are banned from this server.");
+            return;
+        }
         if (session.requiresPasswordOnce()) {
             // The existing account must still exist, but no identity write is allowed before the
             // password; the session survives to the password login for the commit.
@@ -153,7 +187,13 @@ public final class AuthMeLoginListener implements Listener {
                         "An account with this name already exists. Please reconnect or contact an administrator.");
                     return;
                 }
-                pendingRegistrations.put(registrationKey(event.getName(), event.getAddress()), randomPassword());
+                if (!register.test(event.getName(), randomPassword())) {
+                    plugin.getLogger().severe("Could not prepare the account for " + event.getName());
+                    authState.logout(event.getName());
+                    event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
+                    return;
+                }
+                pendingRegistrations.add(registrationKey(event.getName(), event.getAddress()));
             }
             authState.authenticate(event.getName());
             grant.accept(event.getName());
@@ -198,9 +238,9 @@ public final class AuthMeLoginListener implements Listener {
     }
 
     /**
-     * Bukkit performs its ban check before this handler. Registering here keeps rejected players
-     * out of the account table without delaying or reordering the identity commit at pre-login.
-     * A rejected pre-login must also never leave stale in-memory authentication behind.
+     * Registration and its database waits already ran on the async pre-login worker; this handler
+     * only consumes the event marker on the main thread. A rejected join must leave no marker and
+     * no stale in-memory authentication behind.
      */
     @EventHandler(priority = EventPriority.HIGHEST)
     public void onPlayerLogin(PlayerLoginEvent event) {
@@ -209,27 +249,21 @@ public final class AuthMeLoginListener implements Listener {
             return;
         }
         String name = player.getName();
-        // Consume intent before the ban check so a rejected join cannot leave stale registration intent.
-        String password = pendingRegistrations.remove(registrationKey(name, event.getAddress()));
+        // Consume the marker before the result check so a rejected join cannot leave a stale event.
+        boolean registered = pendingRegistrations.remove(registrationKey(name, event.getAddress()));
         if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
             authState.logout(name);
             return;
         }
-        if (password == null) {
-            // Pre-authenticated premium auto-login: no registration, and the password hook is not used.
-            if (authState.isAuthenticated(name)) {
-                plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
-            }
+        if (registered) {
+            plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
+            plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
             return;
         }
-        if (!register.test(name, password)) {
-            plugin.getLogger().severe("Could not prepare the account for " + name);
-            event.disallow(PlayerLoginEvent.Result.KICK_OTHER, message("account-conflict"));
-            authState.logout(name);
-            return;
+        // Pre-authenticated premium auto-login: no registration, and the password hook is not used.
+        if (authState.isAuthenticated(name)) {
+            plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
         }
-        plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
-        plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
     }
 
     /**
@@ -247,7 +281,7 @@ public final class AuthMeLoginListener implements Listener {
         }
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
         if (pending.isEmpty()) {
-            plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
+            onMain.accept(() -> plugin.getServer().getPluginManager().callEvent(new LoginEvent(player)));
             return true;
         }
         VerifiedSession session = pending.get();
@@ -260,13 +294,13 @@ public final class AuthMeLoginListener implements Listener {
         if (result != CommitResult.COMMITTED) {
             plugin.getLogger().severe("Premium identity for " + session.name()
                 + " could not be persisted after password login; refusing to release.");
-            player.kick(message("account-conflict"));
-            authState.logout(player.getName());
+            onMain.accept(() -> player.kick(message("account-conflict")));
+            onMain.accept(() -> authState.logout(player.getName()));
             return false;
         }
-        authState.authenticate(player.getName());
-        onVerifiedLogin.accept(session.connectionId());
-        plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
+        onMain.accept(() -> authState.authenticate(player.getName()));
+        onMain.accept(() -> onVerifiedLogin.accept(session.connectionId()));
+        onMain.accept(() -> plugin.getServer().getPluginManager().callEvent(new LoginEvent(player)));
         return true;
     }
 
