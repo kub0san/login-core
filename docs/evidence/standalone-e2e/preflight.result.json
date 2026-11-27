@@ -1,0 +1,73 @@
+[
+    {
+        "tool":  "list_instances",
+        "args":  {
+
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"instances\\\":[{\\\"id\\\":\\\"server-9\\\",\\\"kind\\\":\\\"server\\\",\\\"name\\\":\\\"global-test-server-26.3\\\",\\\"agentVersion\\\":\\\"0.11.2\\\",\\\"mcVersion\\\":\\\"26.3\\\",\\\"connectedAt\\\":1795740253307,\\\"serverDir\\\":\\\"C:\\\\\\\\Tools\\\\\\\\global-test-server-26.3\\\",\\\"pid\\\":2572}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "server_info",
+        "args":  {
+                     "instance":  "server-9"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"name\\\":\\\"Leaf\\\",\\\"version\\\":\\\"26.3-27-06c9c91 (MC: 26.3)\\\",\\\"minecraftVersion\\\":\\\"26.3\\\",\\\"tps\\\":[20,20,20,20],\\\"mspt\\\":10.29,\\\"memory\\\":{\\\"usedMb\\\":753,\\\"maxMb\\\":1024},\\\"players\\\":{\\\"online\\\":0,\\\"max\\\":20,\\\"names\\\":[]},\\\"worlds\\\":[{\\\"name\\\":\\\"world\\\",\\\"environment\\\":\\\"normal\\\",\\\"players\\\":0,\\\"loadedChunks\\\":0},{\\\"name\\\":\\\"battlegrounds\\\",\\\"environment\\\":\\\"normal\\\",\\\"players\\\":0,\\\"loadedChunks\\\":56},{\\\"name\\\":\\\"desert\\\",\\\"environment\\\":\\\"normal\\\",\\\"players\\\":0,\\\"loadedChunks\\\":0},{\\\"name\\\":\\\"plains\\\",\\\"environment\\\":\\\"normal\\\",\\\"players\\\":0,\\\"loadedChunks\\\":0},{\\\"name\\\":\\\"spawn\\\",\\\"environment\\\":\\\"normal\\\",\\\"players\\\":0,\\\"loadedChunks\\\":0}],\\\"plugins\\\":[{\\\"name\\\":\\\"AuthMe\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"Craftwire\\\",\\\"version\\\":\\\"0.11.2\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"DeveloperMCP\\\",\\\"version\\\":\\\"2.0.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"FancyHolograms\\\",\\\"version\\\":\\\"2.12.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"FancyNpcs\\\",\\\"version\\\":\\\"2.12.1\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"FastAsyncWorldEdit\\\",\\\"version\\\":\\\"2.16.2+eef5a6f\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"FlectonePulse\\\",\\\"version\\\":\\\"1.15.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"KnockbackSync\\\",\\\"version\\\":\\\"1.3.6-dev-b143\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"LibertyBans\\\",\\\"version\\\":\\\"1.1.4\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"LuckPerms\\\",\\\"version\\\":\\\"5.5.71\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"MinecraftMcp\\\",\\\"version\\\":\\\"0.1.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"Multiverse-Core\\\",\\\"version\\\":\\\"5.8.1\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"packetevents\\\",\\\"version\\\":\\\"2.14.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"PlugManX\\\",\\\"version\\\":\\\"3.2.1\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"pvp-core\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"shenanigans-core\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"SkBee\\\",\\\"version\\\":\\\"3.26.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"SkinsRestorer\\\",\\\"version\\\":\\\"15.12.6\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"Skript\\\",\\\"version\\\":\\\"2.17.1\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"skript-gui\\\",\\\"version\\\":\\\"1.4.0\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"skript-reflect\\\",\\\"version\\\":\\\"2.6.3\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"ViaBackwards\\\",\\\"version\\\":\\\"5.12.1\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"ViaVersion\\\",\\\"version\\\":\\\"5.12.2\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"voicechat\\\",\\\"version\\\":\\\"2.6.25\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"VoidGen\\\",\\\"version\\\":\\\"2.3.9\\\",\\\"enabled\\\":true},{\\\"name\\\":\\\"WorldGuard\\\",\\\"version\\\":\\\"7.0.20+2410-0b6c3f1\\\",\\\"enabled\\\":true}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "plugin_manage",
+        "args":  {
+                     "action":  "list",
+                     "instance":  "server-9"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"plugins\\\":[{\\\"name\\\":\\\"AuthMe\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Securely verifies Mojang account ownership and automates AuthMe logins on offline-mode Paper servers.\\\",\\\"authors\\\":[\\\"hizeric\\\"]},{\\\"name\\\":\\\"Craftwire\\\",\\\"version\\\":\\\"0.11.2\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Lets AI agents drive this server through the Craftwire MCP hub. Development servers only.\\\",\\\"authors\\\":[\\\"UXPLIMA\\\"]},{\\\"name\\\":\\\"DeveloperMCP\\\",\\\"version\\\":\\\"2.0.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Lets AI assistants like Claude and Cursor manage the server over the Model Context Protocol.\\\",\\\"authors\\\":[\\\"center2055\\\"]},{\\\"name\\\":\\\"FancyHolograms\\\",\\\"version\\\":\\\"2.12.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Simple, lightweight and fast hologram plugin using display entities\\\",\\\"authors\\\":[]},{\\\"name\\\":\\\"FancyNpcs\\\",\\\"version\\\":\\\"2.12.1\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Simple, lightweight and fast NPC plugin using packets\\\",\\\"authors\\\":[]},{\\\"name\\\":\\\"FastAsyncWorldEdit\\\",\\\"version\\\":\\\"2.16.2+eef5a6f\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Blazingly fast world manipulation for builders, large networks and developers.\\\",\\\"authors\\\":[\\\"Empire92\\\",\\\"MattBDev\\\",\\\"IronApollo\\\",\\\"dordsor21\\\",\\\"NotMyFault\\\",\\\"SirYwell\\\"]},{\\\"name\\\":\\\"FlectonePulse\\\",\\\"version\\\":\\\"1.15.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"FlectonePulse - Every Message Under Your Control!\\\",\\\"authors\\\":[\\\"TheFaser\\\"]},{\\\"name\\\":\\\"KnockbackSync\\\",\\\"version\\\":\\\"1.3.6-dev-b143\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Synchronizes player knockback for smoother gameplay.\\\",\\\"authors\\\":[\\\"Caseload\\\",\\\"Axionize\\\"]},{\\\"name\\\":\\\"LibertyBans\\\",\\\"version\\\":\\\"1.1.4\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"The be-all, end-all of discipline.\\\",\\\"authors\\\":[\\\"Contributors to LibertyBans\\\"]},{\\\"name\\\":\\\"LuckPerms\\\",\\\"version\\\":\\\"5.5.71\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"A permissions plugin\\\",\\\"authors\\\":[\\\"Luck\\\"]},{\\\"name\\\":\\\"MinecraftMcp\\\",\\\"version\\\":\\\"0.1.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"MCP server bridge for AI-assisted Minecraft plugin development\\\",\\\"authors\\\":[\\\"InventiveTalent\\\"]},{\\\"name\\\":\\\"Multiverse-Core\\\",\\\"version\\\":\\\"5.8.1\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"The original Bukkit Multi-World Plugin!\\\",\\\"authors\\\":[\\\"dumptruckman\\\",\\\"Rigby\\\",\\\"fernferret\\\",\\\"lithium3141\\\",\\\"main--\\\",\\\"benwoo1110\\\",\\\"Zax71\\\"]},{\\\"name\\\":\\\"packetevents\\\",\\\"version\\\":\\\"2.14.0\\\",\\\"enabled\\\":true,\\\"description\\\":null,\\\"authors\\\":[\\\"retrooper\\\"]},{\\\"name\\\":\\\"PlugManX\\\",\\\"version\\\":\\\"3.2.1\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Plugin manager for Bukkit servers\\\",\\\"authors\\\":[\\\"rylinaux\\\",\\\"TestAccount666\\\"]},{\\\"name\\\":\\\"pvp-core\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"All in one plugin for most pvp-based servers.\\\",\\\"authors\\\":[\\\"hizeric\\\"]},{\\\"name\\\":\\\"shenanigans-core\\\",\\\"version\\\":\\\"1.0-SNAPSHOT\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"fun abilities and domain expansions go brrr\\\",\\\"authors\\\":[\\\"hizeric\\\"]},{\\\"name\\\":\\\"SkBee\\\",\\\"version\\\":\\\"3.26.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"A simple Skript addon to help customize your server to the fullest.\\\",\\\"authors\\\":[\\\"ShaneBee\\\"]},{\\\"name\\\":\\\"SkinsRestorer\\\",\\\"version\\\":\\\"15.12.6\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Ability to restore/change skins on servers!\\\",\\\"authors\\\":[\\\"knat\\\",\\\"AlexProgrammerDE\\\",\\\"Th3Tr0LLeR\\\",\\\"McLive\\\",\\\"DoNotSpamPls\\\"]},{\\\"name\\\":\\\"Skript\\\",\\\"version\\\":\\\"2.17.1\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Customize Minecraft\\u0027s mechanics with simple scripts written in plain English sentences.\\\",\\\"authors\\\":[\\\"Njol\\\",\\\"Mirreski\\\",\\\"SkriptLang Team\\\",\\\"Contributors\\\"]},{\\\"name\\\":\\\"skript-gui\\\",\\\"version\\\":\\\"1.4.0\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Enables the easy creation of advanced and organized GUIs with Skript.\\\",\\\"authors\\\":[\\\"APickledWalrus\\\"]},{\\\"name\\\":\\\"skript-reflect\\\",\\\"version\\\":\\\"2.6.3\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Reflection utilities for Skript.\\\",\\\"authors\\\":[\\\"Bryan Terce \\u003cbryan.terce@gmail.com\\u003e\\\",\\\"TPGamesNL\\\",\\\"SkriptLang Team\\\"]},{\\\"name\\\":\\\"ViaBackwards\\\",\\\"version\\\":\\\"5.12.1\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Allows the connection of older clients to newer server versions for Minecraft servers.\\\",\\\"authors\\\":[\\\"Matsv\\\",\\\"kennytv\\\",\\\"Gerrygames\\\",\\\"creeper123123321\\\",\\\"ForceUpdate1\\\",\\\"EnZaXD\\\"]},{\\\"name\\\":\\\"ViaVersion\\\",\\\"version\\\":\\\"5.12.2\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"Allows the connection of newer clients to older server versions for Minecraft servers.\\\",\\\"authors\\\":[\\\"_MylesC\\\",\\\"creeper123123321\\\",\\\"Gerrygames\\\",\\\"kennytv\\\",\\\"Matsv\\\",\\\"EnZaXD\\\",\\\"RK_01\\\"]},{\\\"name\\\":\\\"voicechat\\\",\\\"version\\\":\\\"2.6.25\\\",\\\"enabled\\\":true,\\\"description\\\":\\\"A working voice chat in Minecraft\\\",\\\"authors\\\":[\\\"Max Henkel\\\",\\\"Matthew Wells\\\"]},{\\\"name\\\":\\\"VoidGen\\\",\\\"version\\\":\\\"2.3.9\\\",\\\"enabled\\\":true,\\\"description\\\":null,\\\"authors\\\":[\\\"xtkq\\\"]},{\\\"name\\\":\\\"WorldGuard\\\",\\\"version\\\":\\\"7.0.20+2410-0b6c3f1\\\",\\\"enabled\\\":true,\\\"description\\\":null,\\\"authors\\\":[]}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var B=Java.type(\u0027org.bukkit.Bukkit\u0027); var p=B.getPluginManager().getPlugin(\u0027AuthMe\u0027); print(\u0027plugin=\u0027+p.getName()+\u0027 version=\u0027+p.getDescription().getVersion()+\u0027 main=\u0027+p.getClass().getName()+\u0027 enabled=\u0027+p.isEnabled());"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"result\\\":null,\\\"output\\\":\\\"plugin=AuthMe version=1.0-SNAPSHOT main=com.hizeric.logincore.LoginCore enabled=true\\\\n\\\"}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var B=Java.type(\u0027org.bukkit.Bukkit\u0027); var m=B.getServer().getCommandMap().getKnownCommands(); var labels=[\u0027login\u0027,\u0027register\u0027,\u0027changepassword\u0027,\u0027logincore\u0027]; var out=[]; for(var i=0;i\u003clabels.length;i++){var n=labels[i]; var pc=B.getPluginCommand(n); var owner=pc ? pc.getPlugin().getName() : \u0027NONE\u0027; var c=m.get(n); out.push(n+\u0027 -\u003e \u0027+owner+\u0027 (\u0027+(c?c.getClass().getName():\u0027null\u0027)+\u0027)\u0027);} print(out.join(\u0027 | \u0027));"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"result\\\":null,\\\"output\\\":\\\"login -\\u003e AuthMe (org.bukkit.command.PluginCommand) | register -\\u003e AuthMe (org.bukkit.command.PluginCommand) | changepassword -\\u003e AuthMe (org.bukkit.command.PluginCommand) | logincore -\\u003e AuthMe (org.bukkit.command.PluginCommand)\\\\n\\\"}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var C=Java.type(\u0027java.lang.Class\u0027); try{C.forName(\u0027fr.xephi.authme.api.v3.AuthMeApi\u0027); print(\u0027authmeClass=PRESENT\u0027);}catch(e){print(\u0027authmeClass=ABSENT\u0027);} var L=Java.type(\u0027com.hizeric.logincore.events.LoginEvent\u0027); var R=Java.type(\u0027com.hizeric.logincore.events.RegisterEvent\u0027); print(\u0027loginHandler=\u0027+(L.getHandlerList()!=null)+\u0027 registerHandler=\u0027+(R.getHandlerList()!=null));"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"result\\\":null,\\\"output\\\":\\\"authmeClass=ABSENT\\\\nloginHandler=true registerHandler=true\\\\n\\\"}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "exceptions",
+        "args":  {
+                     "instance":  "server-9",
+                     "limit":  20
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"total\\\":0,\\\"exceptions\\\":[]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    }
+]

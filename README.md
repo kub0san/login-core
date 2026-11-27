@@ -1,12 +1,12 @@
-# AuthMePAL
+# login-core
 
-AuthMePAL securely verifies Mojang account ownership on offline-mode Paper servers and connects verified players to AuthMe without a password prompt. Cracked-name collisions are blocked, while other cracked accounts continue through the normal AuthMe flow.
+login-core securely verifies Mojang account ownership on offline-mode Paper servers and handles password login/registration itself. Verified premium players are auto-authenticated without a password prompt; cracked-name collisions are blocked, while other cracked accounts use `/register` and `/login`. AuthMe is not required as a separate server plugin.
 
 **Author:** hizeric
 
 ## Project Layout
 
-- `src/main/java/` — `org.authmePAL` plus the `authme`, `command`, `decision`,
+- `src/main/java/` — `com.hizeric.logincore` plus the `authme`, `command`, `decision`,
   `handshake`, `migration`, `mojang`, `session` and `storage` packages.
 - `src/main/resources/` — `plugin.yml` and `config.yml`.
 - `src/test/java/` — JUnit 5 tests for the decision engine, Mojang lookup/session
@@ -25,26 +25,27 @@ AuthMePAL securely verifies Mojang account ownership on offline-mode Paper serve
 
 ## Requirements
 
-- Paper 26.2 and Java 25
-- PacketEvents 2.13.0 installed as a server plugin
-- AuthMeReloaded 6.0.1 installed as a server plugin
+- Paper 26.3 and Java 25
+- PacketEvents 2.14.0 installed as a server plugin (the only hard plugin dependency)
 - `online-mode=false` in `server.properties`
-- AuthMe `settings.enablePremium: false` (AuthMePAL will disable itself if AuthMe's premium handshake is enabled)
+- Existing AuthMe SQLite `authme` rows are read for password verification; Argon2 hashes are rejected with a reset-password message
 
-AuthMePAL is for a direct Paper server, not a proxy network. An offline-mode server accepts unverified names for accounts that are not linked to premium identities; restrict network access appropriately and do not expose an offline-mode backend to untrusted clients.
+login-core is for a direct Paper server, not a proxy network. An offline-mode server accepts unverified names for accounts that are not linked to premium identities; restrict network access appropriately and do not expose an offline-mode backend to untrusted clients.
 
 ## Install and configure
 
-1. Back up the server and AuthMe data.
-2. Install PacketEvents and AuthMe, remove any old AuthmePAL jar, and place `AuthMePAL-*.jar` in the server's `plugins` directory.
-3. Set `online-mode=false` and set AuthMe `settings.enablePremium: false`.
-4. Start the server once to create `plugins/AuthMePAL/config.yml`.
+1. Back up the server and existing `plugins/AuthMe` data.
+2. Install PacketEvents, remove any old jar, and place `login-core-1.0-SNAPSHOT.jar` in the server's `plugins` directory. AuthMe does not need to be installed.
+3. Set `online-mode=false`.
+4. Start the server once to create `plugins/AuthMe/config.yml`. Dev installs that already have `plugins/AuthMe/data.db` (plus `-wal`/`-shm` siblings) must rename those files to `authme.db` before starting; the new database filename is `authme.db`.
 5. Start with `mode: SHADOW` and review the server log before enabling enforcement. SHADOW performs name lookups and logs decisions but does not start the premium handshake or block the login.
 6. After checking the intended behavior, change `mode` to `ENFORCE` and restart.
 
-This release starts with a fresh `plugins/AuthMePAL` data folder. Previous plugin configuration and link/exemption data are not preserved; back up the old folder first if you may need its contents.
+The runtime plugin name is `AuthMe` (per ADR 0008), so this build uses the `plugins/AuthMe` data folder and `authme.db`. An existing AuthMe-shaped database is opened in place; back it up before upgrading. Previous `AuthMePAL` configuration and link/exemption data are not automatically imported — see [docs/DEVIATIONS.md](./docs/DEVIATIONS.md).
 
-The generated config controls Mojang lookup endpoints, lookup-failure behavior, existing AuthMe account policy, throttles, premium UUID mode, timeouts, and kick messages. Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
+The runtime `name: AuthMe` exists only for `plugins/AuthMe` data-folder continuity and downstream `depend: [AuthMe]` resolution. login-core provides no `AuthMeApi` façade and no binary compatibility with `fr.xephi.authme.events.*`; plugins using the AuthMe API or events must be rebuilt against login-core. `com.hizeric.logincore.events.LoginEvent` fires after successful password login and premium auto-login; `RegisterEvent` fires after `/register` and premium auto-registration.
+
+The generated config controls Mojang lookup endpoints, lookup-failure behavior, existing AuthMe account policy, throttles, premium UUID mode, timeouts, and kick messages (`name-reserved`, `verify-failed`, `lookup-unavailable`, `account-conflict`, `rename-conflict`, `throttled`). `rename-conflict` tells a renamed premium player that their UUID is linked under another name and that an administrator must resolve it; the old link is never moved automatically. Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
 
 ### Premium UUID mode
 
@@ -52,32 +53,29 @@ The generated config controls Mojang lookup endpoints, lookup-failure behavior, 
 
 ### Existing AuthMe accounts
 
-`existing-account-policy` controls a verified premium owner whose username is already registered in AuthMe but has no AuthMePAL link:
+`existing-account-policy` controls a verified premium owner whose username already has an account row but no premium link:
 
-- `REQUIRE_PASSWORD_ONCE` (default): the owner must complete AuthMe password login once; AuthMePAL saves the link after successful login.
-- `ADOPT`: link and auto-login the verified premium identity. Use only after reviewing existing accounts and migration results.
+- `REQUIRE_PASSWORD_ONCE` (default): the owner must complete one `/login` with their existing password; login-core saves the link only after that succeeds.
 - `DENY`: reject the verified premium login until an administrator resolves the account.
 
-Newly encountered premium identities are registered with AuthMe and auto-logged-in using an automatically generated password the player does not know. If Mojang verification is unavailable they cannot use a password fallback; administrators must use AuthMe's supported password-reset process if recovery is needed.
+Newly encountered premium identities are registered locally in `plugins/AuthMe/authme.db` and auto-logged-in using an automatically generated password the player does not know. If Mojang verification is unavailable they have no password fallback, and administrators must resolve the account locally — for example, by editing the database only with a backup, or by removing the account row and letting the player re-register through the supported flow where applicable.
 
 ## Administration
 
-All commands require `authmepal.admin` (default: operators). The command is `/authmepal`; tab completion is available for subcommands, options, and online player names.
+All commands require `logincore.admin` (default: operators). The command is `/logincore`; tab completion is available for subcommands, options, and online player names.
 
 ```text
-/authmepal status [name]
-/authmepal exempt add <name>
-/authmepal exempt remove <name>
-/authmepal exempt list
-/authmepal link <name> <uuid|auto>
-/authmepal unlink <name>
-/authmepal migrate audit
-/authmepal migrate apply --exempt-conflicts [--except name,name]
+/logincore status [name]
+/logincore exempt add <name>
+/logincore exempt remove <name>
+/logincore exempt list
+/logincore migrate audit
+/logincore migrate apply --exempt-conflicts [--except name,name]
 ```
 
-`migrate audit` checks registered AuthMe names and writes a CSV under `plugins/AuthMePAL/migration/`; it does not change account state. `migrate apply --exempt-conflicts` exempts names classified as premium-name conflicts, optionally excluding the comma-separated names. Review the audit and keep a backup before applying changes. Actual migration of existing player UUID-keyed server data is not performed.
+`migrate audit` checks registered names from the local `authme` table and writes a CSV under `plugins/AuthMe/migration/`; it does not change account state. `migrate apply --exempt-conflicts` exempts names classified as premium-name conflicts, optionally excluding the comma-separated names. Review the audit and keep a backup before applying changes. Actual migration of existing player UUID-keyed server data is not performed.
 
-AuthMePAL stores links and exemptions in `plugins/AuthMePAL/data.db`.
+login-core stores links, exemptions and account state in `plugins/AuthMe/authme.db`.
 
 ## Build and tests
 
@@ -94,8 +92,8 @@ The user reports that the previous build's login features worked on their server
 
 ## Credits
 
-AuthMePAL's login flow design was adapted from [FastLogin](https://github.com/games647/FastLogin) (MIT) and [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (GPL-3.0), implemented from scratch against Mojang's public session protocol. No source code was copied from either project. Full provenance, dependency versions, and licences are in [CREDITS.md](./CREDITS.md).
+login-core's login flow design was adapted from [FastLogin](https://github.com/games647/FastLogin) (MIT) and [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) (GPL-3.0), implemented against Mojang's public session protocol. The GPL-3.0 licence is inherited from AuthMeReloaded; upstream provenance and any vendored files are recorded in [NOTICE](./NOTICE). Dependency versions and licences are in [CREDITS.md](./CREDITS.md).
 
 ## License
 
-AuthMePAL is licensed under the GNU General Public License v3.0 (GPL-3.0). See [LICENSE](./LICENSE) for the full text.
+login-core (runtime plugin name `AuthMe`) is licensed under the GNU General Public License v3.0 (GPL-3.0), inherited from AuthMeReloaded. See [LICENSE](./LICENSE) for the full text and [NOTICE](./NOTICE) for provenance.

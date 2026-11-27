@@ -11,14 +11,14 @@
 - If an error occurs (such as a Gradle build failure), read only the relevant stack trace snippet rather than dumping whole configuration logs.
 
 ## 3. Environment Context
-- Target Platform: Minecraft Java Plugin development using **Paper API / Leaf v26.2**.
+- Target Platform: Minecraft Java Plugin development using **Paper API / Leaf v26.3**.
 - Keep all code lightweight, optimized for low-spec hosting servers, and compliant with modern Java standards. 
 
 ---
 
 # Implementation Plan
 
-> Hand-off document for a coding agent. Project name: **AuthMePAL**
+> Hand-off document for a coding agent. Project name: **login-core** (repo name; runtime plugin name is still `AuthMePAL`; flip to `AuthMe` deferred to the vendoring commit — see `docs/DEVIATIONS.md`)
 > Last researched: 19 Oct 2026. Items tagged **[VERIFY]** are assumptions I could not confirm from documentation. Verify them in Phase 0 before building on them.
 > **Status updated: 22 Oct 2026.** The plan below is the original hand-off document; §15 records what was actually built, what is stale in the plan text, and the full defect/edge-case audit. Where they disagree, §15 wins.
 
@@ -58,12 +58,12 @@ AuthMe 6 has a built-in PacketEvents premium bypass, but it is **opt-in** (`/pre
 
 | Component | Version / value | Notes |
 |---|---|---|
-| Server | **Paper 26.2** (offline mode: `online-mode=false`) | New version scheme (no `1.x`). Plugin API dependency `io.papermc.paper:paper-api:26.2.build.+`. |
+| Server | **Paper 26.3** (offline mode: `online-mode=false`) | New version scheme (no `1.x`). Plugin API dependency `io.papermc.paper:paper-api:26.3.build.200-stable`. |
 | Java | **25** | Toolchain 25 (Paper's project-setup docs require Java 25 for 26.x). |
 | Build | **Gradle, Kotlin DSL** (use the wrapper) | `run-paper` Gradle plugin for a local test server. |
-| PacketEvents | **2.13.0** (first release with 26.2 support, 22 Jun 2026) | **Installed as a server plugin, not shaded** (AuthMe also expects the PacketEvents plugin). `compileOnly` + `depend`. |
-| AuthMe | **6.0.1** (3 Sep 2026; lists 26.2 support) | Paper jar vs Spigot-1.21 jar: **[VERIFY]** which one the server should run on Paper 26.2 (AuthMe README says Paper jar for Paper 1.21+). |
-| Plugin descriptor | `plugin.yml` | Paper's own docs flag `paper-plugin.yml` as experimental. `api-version: '26.2'`, `depend: [packetevents, AuthMe]`, plugin name `AuthMePAL`, author `hizeric`. |
+| PacketEvents | **2.14.0** (supports Paper 26.3) | **Installed as a server plugin, not shaded** (AuthMe also expects the PacketEvents plugin). `compileOnly` + `depend`. |
+| AuthMe | **6.0.1** (3 Sep 2026; lists 26.2 support) | Paper jar vs Spigot-1.21 jar: **[VERIFY]** which one the server should run on Paper 26.3 (AuthMe README says Paper jar for Paper 1.21+). |
+| Plugin descriptor | `plugin.yml` | Paper's own docs flag `paper-plugin.yml` as experimental. `api-version: '26.3'`, `depend: [packetevents, AuthMe]`, plugin name `AuthMePAL`, author `hizeric`. The name/`depend` flip is deferred to the vendoring commit (`docs/DEVIATIONS.md`). |
 | JSON | Gson | Provided by the server; don't shade. |
 | Storage | SQLite (single file) | **[RESOLVED]** the driver does not ship with Paper; `plugin.yml` declares it under `libraries:` (`plugin.yml:8-10`). |
 | HTTP | JDK `java.net.http.HttpClient` | Connect timeout 3 s, request timeout 5 s. |
@@ -83,8 +83,8 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.200-stable")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.14.0")
     compileOnly("fr.xephi:authme-core:6.0.1")                     // [VERIFY] artifact + AuthMeApi package (api.v3?)
     testImplementation(platform("org.junit:junit-bom:<latest 5.x>"))
     testImplementation("org.junit.jupiter:junit-jupiter")
@@ -93,7 +93,7 @@ dependencies {
 java { toolchain.languageVersion.set(JavaLanguageVersion.of(25)) }
 
 tasks.runServer {
-    minecraftVersion("26.2")
+    minecraftVersion("26.3")
     // download PacketEvents + AuthMe into the run dir; write online-mode=false  [VERIFY run-paper syntax]
 }
 ```
@@ -102,11 +102,11 @@ tasks.runServer {
 
 ## 3. Architecture
 
-> **As built** (verified 22 Oct 2026). The original sketch below is superseded: the package was renamed, the `config/` package was never created (config is read directly in `AuthMePAL`), the listener is `PremiumLoginListener`, and the state enum is `LoginFlowState` (`docs/DEVIATIONS.md:4-5`).
+> **As built** (verified 22 Oct 2026). The original sketch below is superseded: the package was renamed to `com.hizeric.logincore`, the `config/` package was never created (config is read directly in `LoginCore`), the listener is `PremiumLoginListener`, and the state enum is `LoginFlowState` (`docs/DEVIATIONS.md:4-5`).
 
 ```
-org.authmePAL
-├── AuthMePAL.java                // JavaPlugin: wiring, worker pool, startup guards, ordered shutdown
+com.hizeric.logincore
+├── LoginCore.java                // JavaPlugin: wiring, worker pool, startup guards, ordered shutdown
 ├── mojang/
 │   ├── MojangClient.java         // name->uuid lookup, hasJoined; base URLs configurable (test seam)
 │   ├── LookupResult.java         // PREMIUM(uuid,canonicalName) | NOT_PREMIUM | UNKNOWN(reason)
@@ -117,7 +117,7 @@ org.authmePAL
 │   ├── LoginFlowState.java       // per-connection state enum (renamed to avoid PacketEvents collision)
 │   ├── EncryptionKeys.java       // RSA-1024 keypair created at startup
 │   ├── CipherInstaller.java      // installs AES/CFB8 handlers in the Netty pipeline
-│   ├── LoginMetrics.java         // counters surfaced by /authmepal status
+│   ├── LoginMetrics.java         // counters surfaced by /logincore status
 │   └── ServerHash.java           // Minecraft's signed-hex SHA-1
 ├── decision/
 │   └ LoginDecisionEngine.java    // pure logic: inputs -> Action (unit-testable, no I/O)
@@ -129,13 +129,13 @@ org.authmePAL
 ├── session/
 │   └── VerifiedSessions.java     // short-lived, one-shot, keyed by name@ip (see DEVIATIONS.md:6)
 ├── command/
-│   └── AdminCommand.java         // /authmepal status|exempt|link|unlink|migrate
+│   └── AdminCommand.java         // /logincore status|exempt|migrate
 └── migration/
     └── MigrationAudit.java
 ```
 Rules: `LoginDecisionEngine` has **no** PacketEvents/Bukkit/AuthMe imports (honoured). `AuthMeBridge` isolates AuthMe so an API change touches one file (honoured).
 
-**Test classes** (`src/test/java/org/authmePAL/`): `ServerHashTest`, `MojangClientTest`, `LoginDecisionEngineTest`, `StorageTest`, `VerifiedSessionTest`, `CipherInstallerTest`, `SpikeS4Test`.
+**Test classes** (`src/test/java/com/hizeric/logincore/`): `ServerHashTest`, `MojangClientTest`, `LoginDecisionEngineTest`, `StorageTest`, `VerifiedSessionTest`, `CipherInstallerTest`, `SpikeS4Test`.
 
 ---
 
@@ -203,8 +203,8 @@ sequenceDiagram
 |---|---|---|
 | not registered | none | Register with a random password, create link `(N,V)`, force login. |
 | registered | link = `V` | Force login. |
-| registered | link = `U ≠ V` | **Kick `account-conflict`** (name was reassigned on Mojang's side, or squatting). Admin resolves with `/authmepal unlink N`. |
-| registered | none | Apply `existing-account-policy`: `REQUIRE_PASSWORD_ONCE` (default), `ADOPT`, or `DENY`. See §9. |
+| registered | link = `U ≠ V` | **Kick `account-conflict`** (name was reassigned on Mojang's side, or squatting). No admin unlink command exists; links are write-once. |
+| registered | none | Apply `existing-account-policy`: `REQUIRE_PASSWORD_ONCE` (default) or `DENY` (`ADOPT` was dropped). See §9. |
 
 `mode: SHADOW` (config) runs lookups and logs the decision it **would** take but passes everything through. This is the migration safety net (§9).
 
@@ -212,7 +212,7 @@ sequenceDiagram
 
 ## 5. Data and configuration
 
-### SQLite (`plugins/AuthMePAL/data.db`)
+### SQLite (`plugins/AuthMePAL/data.db` — moves to `plugins/AuthMe/authme.db` with the deferred runtime-name flip; see `docs/DEVIATIONS.md`)
 ```sql
 links(name_lower TEXT PRIMARY KEY, mojang_uuid TEXT NOT NULL, canonical_name TEXT,
       linked_at INTEGER, last_verified_at INTEGER, source TEXT)   -- source: AUTO|PASSWORD_ONCE|ADMIN
@@ -225,7 +225,7 @@ All access through one single-thread executor. Names always stored **lowercase**
 ```yaml
 mode: ENFORCE                    # ENFORCE | SHADOW
 on-lookup-failure: ALLOW         # ALLOW | DENY   (only for names we have no link for)
-existing-account-policy: REQUIRE_PASSWORD_ONCE   # REQUIRE_PASSWORD_ONCE | ADOPT | DENY
+existing-account-policy: REQUIRE_PASSWORD_ONCE   # REQUIRE_PASSWORD_ONCE | DENY  (ADOPT dropped)
 handshake-timeout-seconds: 10
 # Verified premium players use their Mojang UUID instead of their offline UUID.
 # Premium UUID mode can orphan existing UUID-based inventories and plugin data; those are not migrated.
@@ -296,18 +296,18 @@ We cancel LOGIN_START so the server doesn't proceed to offline login, and cancel
 - **Policy when Mojang is down:** known-premium names (have a link) fail closed; unknown names follow `on-lookup-failure`.
 
 ### P6. Name reassignment and squatting (UUID binding)
-Auto-login is allowed **only if `link.mojang_uuid == verified UUID`**. A name that moves to another Mojang account must never inherit the old account's data. Mismatch ⇒ `account-conflict` kick (see post-verify table). Renames are a v1 non-goal: a renamed premium player gets a new account under the new name; the old link stays until an admin unlinks it.
+Auto-login is allowed **only if `link.mojang_uuid == verified UUID`**. A name that moves to another Mojang account must never inherit the old account's data. Mismatch ⇒ `account-conflict` kick (see post-verify table). Renames are a v1 non-goal: a renamed premium player gets a new account under the new name; the old link is never moved automatically, and a verified UUID already linked under another name is rejected with `rename-conflict` (task 20).
 
 ### P7. Existing registered accounts
 See §9 (migration).
 
 ### P8. Premium UUID mode ("as if it was never cracked")
-- **`use-premium-uuid`: true by default** (this supersedes the original "keep the offline UUID" default). A successfully verified premium session uses the Mojang UUID through Paper's async pre-login player profile, applied at `EventPriority.LOWEST`; cracked, exempt, and pass-through logins keep Paper's offline UUID. The flag was also corrected in `AuthMePAL.java` — the code's default previously disagreed with the config default.
+- **`use-premium-uuid`: true by default** (this supersedes the original "keep the offline UUID" default). A successfully verified premium session uses the Mojang UUID through Paper's async pre-login player profile, applied at `EventPriority.LOWEST`; cracked, exempt, and pass-through logins keep Paper's offline UUID. The flag was also corrected in `LoginCore.java` — the code's default previously disagreed with the config default.
 - Switching a premium player from an offline UUID to a Mojang UUID changes the identity key used by inventories and other plugins. There is no automatic migration; `onEnable` now logs two warnings when the flag is on (data loss + LuckPerms UUID keying). Back up and handle any required data conversion separately before enabling this.
 - Skin forwarding is intentionally not provided; use a dedicated skin-restoration plugin.
 
 ### P9. Conflict with AuthMe's own premium handshake
-Both plugins listen for LOGIN_START / ENCRYPTION_RESPONSE via PacketEvents. Require `settings.enablePremium: false` in AuthMe. **As built, the guard is stronger than planned:** rather than warning and disabling the handshake engine in `ENFORCE`, `AuthMePAL.onEnable` refuses to enable at all (`AuthMePAL.java:48-52`), and likewise refuses `online-mode=true` (:53-57). **[VERIFY]** that AuthMe registers no login-phase listeners when the flag is `false` — this is spike S6, still pending a live two-plugin test (`docs/SPIKE_RESULTS.md`).
+Both plugins listen for LOGIN_START / ENCRYPTION_RESPONSE via PacketEvents. Require `settings.enablePremium: false` in AuthMe. **As built, the guard is stronger than planned:** rather than warning and disabling the handshake engine in `ENFORCE`, `LoginCore.onEnable` refuses to enable at all (`LoginCore.java:48-52`), and likewise refuses `online-mode=true` (:53-57). **[VERIFY]** that AuthMe registers no login-phase listeners when the flag is `false` — this is spike S6, still pending a live two-plugin test (`docs/SPIKE_RESULTS.md`).
 
 ### P10. Same-name concurrent connections and connection binding
 AuthMe 6.0.1 fixed a pre-join session takeover caused by state keyed on the offline UUID, which is shared by every connection using the same name. **Don't repeat that mistake:** key everything (`ConnectionState`, `VerifiedSession`) by **connection identity** (channel id + remote address + creation time), never by name or UUID alone. `VerifiedSession`: one-shot, TTL 60 s, consumed at join. Reject a second simultaneous handshake for the same name ("already connecting").
@@ -356,7 +356,7 @@ Write each answer in `docs/SPIKE_RESULTS.md` with evidence (log lines, javadoc l
 | **M5 AuthMe integration + storage** | **Done — live verification pending** | `AuthMeBridge`, `Storage`, post-verify table (`LoginDecisionEngine:85-105`), `AuthMeLoginListener`, startup guard. All six "Done when" behaviours are implemented in code; none confirmed on a live server yet. |
 | **M6 Premium UUID mode** | **Done — live test pending** | Profile applied at `EventPriority.LOWEST` (`AuthMeLoginListener:51-61`) using `VerifiedSessions.playerUuid`. |
 | **M7 Migration tooling** | **Done** | `AdminCommand` + `MigrationAudit` (resumable CSV). Note: the audit **always resumes** the existing CSV rather than starting a fresh pass (defect F-06). |
-| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/authmepal status` counters, README (incl. verification limits), example config, `CREDITS.md`. **Missing:** CI (no `.github/`); `LICENSE` not chosen yet. `LICENSE`+`NOTICE` "only if you reused FastLogin code" does not apply — no code was reused. |
+| **M8 Hardening and release** | **Partial** | Done: decision-reason debug logging, `/logincore status` counters, README (incl. verification limits), example config, `CREDITS.md`, `LICENSE` (GPL-3.0) and `NOTICE` (provenance). **Missing:** CI (no `.github/`). The one vendored file is jBCrypt 0.4 (ISC), not AuthMe; see `NOTICE` for provenance and `CREDITS.md` for dependency versions and licences. |
 
 ---
 
@@ -395,10 +395,10 @@ Gradle project, `plugin.yml`, `runServer` task with offline-mode server + Packet
 `use-premium-uuid` applies the verified Mojang UUID to the pre-login profile. Skin restoration is delegated to a separate plugin. UUID-keyed data migration is not included.
 
 ### M7 — Migration tooling
-`/authmepal migrate audit|apply`, `exempt`, `link`, `unlink`, `status` (details in §9).
+`/logincore migrate audit|apply|classify`, `exempt`, `status` (details in §9). No `link`/`unlink` command exists — links are write-once.
 
 ### M8 — Hardening and release
-Debug logging with decision reasons, counters (`/authmepal status` summary: lookups, cache hits, 429s, handshakes OK/failed), README, example configs, `LICENSE` + `NOTICE` (only if you reused FastLogin code), CI build.
+Debug logging with decision reasons, counters (`/logincore status` summary: lookups, cache hits, 429s, handshakes OK/failed), README, example configs, `LICENSE` + `NOTICE` (provenance; see ADR 0008), CI build.
 
 ---
 
@@ -412,19 +412,19 @@ Starting from an **empty database** nothing here is required. It matters if you 
 
 **Procedure**
 1. **Shadow mode.** Set `mode: SHADOW`. The plugin logs what it would do (`would-kick`, `would-handshake`) without affecting anyone. Run it for a few days.
-2. **Audit.** `/authmepal migrate audit`: read every registered AuthMe name, look each up on Mojang (throttled to the budget in P5, **resumable**, progress persisted), write `plugins/AuthMePAL/migration/audit-<timestamp>.csv` with columns `name, status(PREMIUM_NAME|NOT_PREMIUM|LOOKUP_ERROR), mojang_uuid, last_login, last_ip, registered_at`. Expect roughly 1 name/second. No changes are made.
+2. **Audit.** `/logincore migrate audit`: read every registered AuthMe name, look each up on Mojang (throttled to the budget in P5, **resumable**, progress persisted), write `plugins/AuthMePAL/migration/audit-<timestamp>.csv` with columns `name, status(PREMIUM_NAME|NOT_PREMIUM|LOOKUP_ERROR), mojang_uuid, last_login, last_ip, registered_at`. Expect roughly 1 name/second. No changes are made.
    - **As built:** the CSV is created fresh only when `migration/current-audit.txt` is absent — once it exists, every later run resumes the same file forever and completed classifications are never refreshed. Delete the pointer file (or add a `--fresh` flag) to re-audit. See defect **F-06** (§15).
    - Source of names: AuthMe API method if S4 finds one; otherwise a **read-only** JDBC connection using the DB settings from AuthMe's `config.yml`. Never write to AuthMe's database directly.
 3. **Review the CSV.** For each `PREMIUM_NAME` row decide:
-   - *Cracked squatter (keep their account):* **grandfather**: `/authmepal exempt add <name>`. Exempt names are never handshaken, so the real owner of that name can't use it either (document this to players).
+   - *Cracked squatter (keep their account):* **grandfather**: `/logincore exempt add <name>`. Exempt names are never handshaken, so the real owner of that name can't use it either (document this to players).
    - *Real owner:* do nothing; the policy below handles them.
    - *Unsure:* leave unresolved and ask the player.
-   - `/authmepal migrate apply --exempt-conflicts` bulk-exempts every `PREMIUM_NAME` row except names listed in `--except`.
+   - `/logincore migrate apply --exempt-conflicts` bulk-exempts every `PREMIUM_NAME` row except names listed in `--except`.
 4. **Real owners link themselves with `REQUIRE_PASSWORD_ONCE`.** First premium-verified join of a registered, unlinked name: the plugin does **not** force login; AuthMe prompts for the password; on the first successful password login by that same verified connection, create link `(name, verifiedUuid, source=PASSWORD_ONCE)`. From then on: auto-login. A squatter's account can't be hijacked because the real owner must know the password.
-   - Locked-out real owner (squatter registered first)? Admin runs `/authmepal link <name> <uuid>` after `/authme unregister <name>`, or `/authmepal unlink <name>`.
+   - Locked-out real owner (squatter registered first)? There is no `link`/`unlink` command: links are write-once. A verified UUID already linked under another name is rejected with `rename-conflict`; an administrator must resolve the stored link out of band.
 5. **Switch to `ENFORCE`.**
 
-Admin commands (permission `authmepal.admin`): `/authmepal status <name>` (link, exempt, AuthMe registered — **the lookup result promised here is not implemented**, see F-16), `/authmepal exempt add|remove|list [name]`, `/authmepal link <name> <uuid|auto>`, `/authmepal unlink <name>`, `/authmepal migrate audit`, `/authmepal migrate apply ...`. Subcommands/options and online player names have tab completion.
+Admin commands (permission `logincore.admin`): `/logincore status [name]` (link, exempt, AuthMe registered, immutable classification, and a UUID conflict's `linked-name`), `/logincore exempt add|remove <name>`, `/logincore exempt list`, `/logincore migrate audit`, `/logincore migrate apply --exempt-conflicts [--except name,name]`, `/logincore migrate classify`. Subcommands/options and online player names have tab completion. No `link`/`unlink` command exists — links are write-once.
 
 ---
 
@@ -481,12 +481,12 @@ Turn on `debug: true` before capturing logs. **Redact secrets.**
 
 ## 13. Licensing and credits
 
-> **Status: [DONE — see `CREDITS.md`.]** The provenance claim below was verified with a statement-level diff against upstream AuthMe and FastLogin sources: no code was copied. `CREDITS.md` records the design references, every dependency with its version and licence, and this analysis.
+> **Status: [DONE — see `CREDITS.md` and `NOTICE`.]** The claim below that no AuthMe or FastLogin code was copied still holds; the one vendored file is jBCrypt 0.4 (ISC), recorded in `NOTICE`. `CREDITS.md` records the design references, every dependency with its version and licence, and this analysis.
 
 - FastLogin (TuxCoding) is **MIT**: keep its copyright/permission notice only if code is copied or closely adapted. **No code was copied** — only the login-flow design.
 - AuthMeReloaded is **GPL-3.0**: depend on its API only (`compileOnly`); don't copy its source, including its PacketEvents premium handshake. Use it only as behavioural reference. **Honoured** — AuthMe types appear only in `AuthMeBridge` and `AuthMeLoginListener`, never vendored.
 - **PacketEvents is GPL-3.0** (previously assumed MIT here — corrected 21 Oct 2026). It is `compileOnly` and installed as a separate server plugin; nothing from it is bundled in the AuthMePAL jar.
-- AuthMePAL's own licence: **not yet chosen.**
+- AuthMePAL's own licence: **GPL-3.0**, inherited from AuthMeReloaded — see `LICENSE` and `NOTICE` for provenance.
 - Reference reading: AuthMe `docs/premium.md` (how their handshake is structured), PacketEvents docs (login wrappers: `WrapperLoginServerEncryptionRequest(serverId, publicKeyBytes, verifyToken, shouldAuthenticate)` etc. **[VERIFY]** the client-side wrapper names), Paper docs (project setup).
 
 ---
@@ -495,7 +495,7 @@ Turn on `debug: true` before capturing logs. **Redact secrets.**
 
 R1–R5 met; M0–M5, M7, M8 complete (M6 optional); security checklist fully ticked; manual matrix executed on Paper 26.2 with PacketEvents 2.13.0 and AuthMe 6.0.1; `docs/SPIKE_RESULTS.md` and `docs/DEVIATIONS.md` up to date.
 
-**Remaining to reach that bar:** M8 CI, a `LICENSE` choice, spike S1/S5/S6 + S7 live verification, the manual matrix, the `FakeClient` integration harness (§10), a live join test for premium-UUID propagation, and the "no proxy in v1" documentation gap (§11 item 12). Defects **K-1, K-2, K-3, F-01** should be resolved or explicitly accepted before release (§15).
+**Remaining to reach that bar:** M8 CI, spike S1/S5/S6 + S7 live verification, the manual matrix, the `FakeClient` integration harness (§10), a live join test for premium-UUID propagation, and the "no proxy in v1" documentation gap (§11 item 12). Defects **K-1, K-2, K-3, F-01** should be resolved or explicitly accepted before release (§15).
 
 ---
 
@@ -572,7 +572,7 @@ The two address sources are independent — `DEVIATIONS.md:6` documents the cons
 **Proposed harness (in preference order):**
 1. **JUnit, small refactor:** give `MigrationAudit` `Path dataFolder`, `Supplier<List<String>> registeredNames`, `Function<String, Optional<AuditRow>> info` instead of `JavaPlugin`/`AuthMeBridge`; make `parseCsvLine`/`completedNames`/`latestAudit` package-private statics; reuse the `com.sun.net.httpserver.HttpServer` pattern already proven in `MojangClientTest:127-192`. Covers classification, header/columns, resume-skip, `LOOKUP_ERROR` retry, `--except` filtering, and the traversal guard.
 2. **Zero-code live harness:** `runServer` + dev AuthMe + register known premium names + point `config.yml:10-12` at a local mock; run `migrate audit` twice (resume), then `migrate apply --exempt-conflicts` on disposable data.
-3. **Dev subcommand:** `/authmepal dev lookup <name>` — `AdminCommand` already holds `mojang` + `workers`; mirror `handleLink`'s async pattern to print `LookupResult.type()`/UUID without writing state.
+3. **Dev subcommand:** `/logincore dev lookup <name>` — `AdminCommand` already holds `mojang` + `workers`; mirror the existing `status` async pattern to print `LookupResult.type()`/UUID without writing state.
 
 #### K-3 — Premium owner renames (a) onto a cracked name / (b) onto a fresh name
 

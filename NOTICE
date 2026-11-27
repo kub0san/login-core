@@ -1,0 +1,36 @@
+# NOTICE — provenance and vendored source
+
+This file is required by [ADR 0008](./docs/adr/0008-identity-licensing-vendoring.md)
+before any vendored source is committed.
+
+## Upstream project
+
+- Vendored source: [jBCrypt 0.4](https://github.com/jeremyh/jBCrypt) (Damien Miller, ISC), tree `e015c2c`. This is the actual source of the vendored file below.
+- Behavioural reference only: [AuthMeReloaded](https://github.com/AuthMe/AuthMeReloaded) @ `56e9a66b` (GPL-3.0). No code is vendored from AuthMe.
+
+The vendored file below is a self-contained BCrypt implementation from jBCrypt
+0.4 (ISC). AuthMe's own BCrypt wrappers at `56e9a66b` define the accepted
+`$2b$`/`$2y$` behaviour but delegate to BouncyCastle, which login-core does not
+ship; they are a reference, not a source of copied code.
+
+## Vendored files
+
+- `src/main/java/com/hizeric/logincore/authme/BCrypt.java` — self-contained BCrypt
+  implementation vendored from jBCrypt 0.4 (Damien Miller, ISC-style licence),
+  upstream path `src/main/java/org/mindrot/BCrypt.java` at
+  https://github.com/jeremyh/jBCrypt (tree `e015c2c`); upstream copyright header
+  retained verbatim. Package renamed and `hashpw` widened to accept `$2b$`/`$2y$`.
+  AuthMeReloaded commit `56e9a66b` is the behavioural reference for those prefixes:
+  `authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt.java` and
+  `authme-core/src/main/java/fr/xephi/authme/security/crypts/BCrypt2y.java`.
+  Those upstream classes delegate to BouncyCastle `OpenBSDBCrypt`, which would
+  require a new Gradle dependency, so the public-domain algorithm was vendored
+  instead.
+
+Local file using the vendored source (not itself vendored):
+`src/main/java/com/hizeric/logincore/authme/AuthMePasswords.java`.
+
+When a file is vendored, retain its upstream copyright and licence headers
+verbatim and list it here with its upstream path.
+
+Recorded: 2026-11-27.

@@ -1,0 +1,186 @@
+[
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"count\\\":0,\\\"joining\\\":0,\\\"bots\\\":[]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "PwBot1"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"spawned\\\":1,\\\"names\\\":\\\"PwBot1\\\",\\\"ms\\\":853}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "chat",
+                     "text":  "preauth hello"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"sent\\\":true}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/spawn"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"spawn\\\",\\\"success\\\":false,\\\"cancelled\\\":true,\\\"messages\\\":[{\\\"id\\\":3,\\\"time\\\":1795740263758,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/logincore status"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"logincore status\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":4,\\\"time\\\":1795740264165,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You do not have permission to use this command.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/changepassword PwTest123 PwHack999"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"changepassword PwTest123 PwHack999\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":5,\\\"time\\\":1795740264603,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "move_to",
+                     "x":  8,
+                     "y":  69,
+                     "z":  8,
+                     "timeoutMs":  3000
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"reached\\\":false,\\\"reason\\\":\\\"timeout\\\",\\\"x\\\":0,\\\"y\\\":69,\\\"z\\\":0,\\\"distance\\\":11.31}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "state"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"name\\\":\\\"PwBot1\\\",\\\"kind\\\":\\\"plugin\\\",\\\"uuid\\\":\\\"f83e33e4-263a-3f9c-a84c-ee53d58d9070\\\",\\\"world\\\":\\\"world\\\",\\\"x\\\":0,\\\"y\\\":69,\\\"z\\\":0,\\\"yaw\\\":0,\\\"pitch\\\":0,\\\"health\\\":20,\\\"food\\\":20,\\\"gameMode\\\":\\\"survival\\\",\\\"onGround\\\":true,\\\"dead\\\":false,\\\"moving\\\":false,\\\"digging\\\":false,\\\"sneaking\\\":false,\\\"sprinting\\\":false,\\\"heldSlot\\\":0,\\\"inventory\\\":[],\\\"openMenu\\\":null}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"messages\\\":[{\\\"id\\\":1,\\\"time\\\":1795740263518,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"PwBot1 joined the game\\\",\\\"clicks\\\":[{\\\"text\\\":\\\"PwBot1\\\",\\\"action\\\":\\\"suggest_command\\\",\\\"value\\\":\\\"/tell PwBot1 \\\"}]},{\\\"id\\\":2,\\\"time\\\":1795740263709,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":3,\\\"time\\\":1795740263758,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":4,\\\"time\\\":1795740264165,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You do not have permission to use this command.\\\"},{\\\"id\\\":5,\\\"time\\\":1795740264603,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/register PwTest123 PwTest123"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"register PwTest123 PwTest123\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":6,\\\"time\\\":1795740268402,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Account registered. You are now logged in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/register PwTest123 PwTest123"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"register PwTest123 PwTest123\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":7,\\\"time\\\":1795740268803,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"That account is already registered. Use /login.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/changepassword PwTest123 PwNew456"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"changepassword PwTest123 PwNew456\\\",\\\"success\\\":true,\\\"messages\\\":[]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwTest123"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login PwTest123\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":8,\\\"time\\\":1795740269452,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Your password changed.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwNew456"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login PwNew456\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":9,\\\"time\\\":1795740269703,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 4 attempts remaining.\\\"},{\\\"id\\\":10,\\\"time\\\":1795740270003,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You are now logged in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"messages\\\":[{\\\"id\\\":1,\\\"time\\\":1795740263518,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"PwBot1 joined the game\\\",\\\"clicks\\\":[{\\\"text\\\":\\\"PwBot1\\\",\\\"action\\\":\\\"suggest_command\\\",\\\"value\\\":\\\"/tell PwBot1 \\\"}]},{\\\"id\\\":2,\\\"time\\\":1795740263709,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":3,\\\"time\\\":1795740263758,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":4,\\\"time\\\":1795740264165,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You do not have permission to use this command.\\\"},{\\\"id\\\":5,\\\"time\\\":1795740264603,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":6,\\\"time\\\":1795740268402,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Account registered. You are now logged in.\\\"},{\\\"id\\\":7,\\\"time\\\":1795740268803,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"That account is already registered. Use /login.\\\"},{\\\"id\\\":8,\\\"time\\\":1795740269452,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Your password changed.\\\"},{\\\"id\\\":9,\\\"time\\\":1795740269703,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 4 attempts remaining.\\\"},{\\\"id\\\":10,\\\"time\\\":1795740270003,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You are now logged in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    }
+]

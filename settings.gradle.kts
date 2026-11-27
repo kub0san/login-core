@@ -1,1 +1,1 @@
-rootProject.name = "authmePAL"
+rootProject.name = "login-core"

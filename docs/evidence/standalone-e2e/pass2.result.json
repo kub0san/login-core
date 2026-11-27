@@ -1,0 +1,251 @@
+[
+    {
+        "tool":  "bot_remove",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"removed\\\":1}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "PwBot1"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"spawned\\\":1,\\\"names\\\":\\\"PwBot1\\\",\\\"ms\\\":129}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "chat",
+                     "text":  "rejoin preauth"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"sent\\\":true}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/spawn"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"spawn\\\",\\\"success\\\":false,\\\"cancelled\\\":true,\\\"messages\\\":[{\\\"id\\\":3,\\\"time\\\":1795740271406,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"messages\\\":[{\\\"id\\\":1,\\\"time\\\":1795740271277,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"PwBot1 joined the game\\\",\\\"clicks\\\":[{\\\"text\\\":\\\"PwBot1\\\",\\\"action\\\":\\\"suggest_command\\\",\\\"value\\\":\\\"/tell PwBot1 \\\"}]},{\\\"id\\\":2,\\\"time\\\":1795740271362,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":3,\\\"time\\\":1795740271406,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwNew456"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login PwNew456\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":4,\\\"time\\\":1795740272253,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You are now logged in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"messages\\\":[{\\\"id\\\":1,\\\"time\\\":1795740271277,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"PwBot1 joined the game\\\",\\\"clicks\\\":[{\\\"text\\\":\\\"PwBot1\\\",\\\"action\\\":\\\"suggest_command\\\",\\\"value\\\":\\\"/tell PwBot1 \\\"}]},{\\\"id\\\":2,\\\"time\\\":1795740271362,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":3,\\\"time\\\":1795740271406,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Log in first: /login or /register.\\\"},{\\\"id\\\":4,\\\"time\\\":1795740272253,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"You are now logged in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "BruteBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"spawned\\\":1,\\\"names\\\":\\\"BruteBot\\\",\\\"ms\\\":126}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login WrongPass111\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":2,\\\"time\\\":1795740272653,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 4 attempts remaining.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login WrongPass111\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":3,\\\"time\\\":1795740273052,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 3 attempts remaining.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login WrongPass111\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":4,\\\"time\\\":1795740273453,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 2 attempts remaining.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"command\\\":\\\"login WrongPass111\\\",\\\"success\\\":true,\\\"messages\\\":[{\\\"id\\\":5,\\\"time\\\":1795740273853,\\\"kind\\\":\\\"system\\\",\\\"text\\\":\\\"Incorrect password. 1 attempts remaining.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"BOT_NOT_FOUND\\\",\\\"message\\\":\\\"No bot named BruteBot\\\",\\\"hint\\\":\\\"bot_spawn creates bots; bot_list shows the bots of every kind.\\\"}\"}],\"isError\":true},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  true,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"BOT_NOT_FOUND\\\",\\\"message\\\":\\\"No bot named BruteBot\\\",\\\"hint\\\":\\\"bot_spawn creates bots; bot_list shows the bots of every kind.\\\"}\"}],\"isError\":true},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  true,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_remove",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"BOT_NOT_FOUND\\\",\\\"message\\\":\\\"No bot named BruteBot\\\",\\\"hint\\\":\\\"bot_spawn creates bots; bot_list shows the bots of every kind.\\\"}\"}],\"isError\":true},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  true,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "BruteBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"spawned\\\":1,\\\"names\\\":\\\"BruteBot\\\",\\\"ms\\\":118}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"BOT_NOT_FOUND\\\",\\\"message\\\":\\\"No bot named BruteBot\\\",\\\"hint\\\":\\\"bot_spawn creates bots; bot_list shows the bots of every kind.\\\"}\"}],\"isError\":true},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  true,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "messages"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"code\\\":\\\"BOT_NOT_FOUND\\\",\\\"message\\\":\\\"No bot named BruteBot\\\",\\\"hint\\\":\\\"bot_spawn creates bots; bot_list shows the bots of every kind.\\\"}\"}],\"isError\":true},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  true,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"count\\\":1,\\\"joining\\\":0,\\\"bots\\\":[{\\\"name\\\":\\\"PwBot1\\\",\\\"kind\\\":\\\"plugin\\\",\\\"uuid\\\":\\\"f83e33e4-263a-3f9c-a84c-ee53d58d9070\\\",\\\"world\\\":\\\"world\\\",\\\"x\\\":0,\\\"y\\\":69,\\\"z\\\":0}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "logs",
+        "args":  {
+                     "instance":  "server-9",
+                     "contains":  "failed login",
+                     "limit":  20
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"instance\\\":\\\"server-9\\\",\\\"lines\\\":[{\\\"time\\\":1795740274255,\\\"level\\\":\\\"INFO\\\",\\\"logger\\\":\\\"net.minecraft.server.network.ServerGamePacketListenerImpl\\\",\\\"message\\\":\\\"BruteBot lost connection: Too many failed login attempts. Reconnect and try again.\\\"},{\\\"time\\\":1795740280855,\\\"level\\\":\\\"INFO\\\",\\\"logger\\\":\\\"net.minecraft.server.network.ServerGamePacketListenerImpl\\\",\\\"message\\\":\\\"BruteBot lost connection: Too many failed login attempts. Reconnect and try again.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    }
+]

@@ -1,25 +1,25 @@
 ﻿# AGENTS.md
 
-Project-specific agent instructions for **authmePAL** (Paper authentication plugin, Java).
+Project-specific agent instructions for **login-core** (Paper authentication plugin, Java).
 
 ## Platform
 
 - **Target/main server:** Paper **26.3** (Java 25). This is the production target. The **only local test server** is `C:\Tools\global-test-server-26.3` (Leaf 26.3-27, API `26.3.build.27-alpha`, Java 25, game port **25566**, offline/cracked, qcart-only player data, three restored loopback bridges); manage it with `TestServer.ps1` (see `../GLOBAL_TEST_SERVER.md`); use it for target testing. There is no local 1.21.11 server (retired 2026-11-23); older clients join via ViaVersion + ViaBackwards. From MC 26.1 Paper is deobfuscated and reobfuscation is unsupported; use Mojang mappings for 26.x work.
 - **Java:** 25 (toolchain). Emits Java 25 bytecode.
-- **Plugin name:** `authmePAL`. PacketEvents 2.13.0 (spigot) for handshake/session work.
+- **Plugin name:** `AuthMe` (runtime name); package `com.hizeric.logincore`; command `/logincore`. PacketEvents 2.14.0 (spigot) for handshake/session work.
 
 ## Build & run
 
 - Build: `./gradlew build`
 - Tests: `./gradlew test` (JUnit 5 present under src/test/java).
-- Run server: `./gradlew runServer` (currently pinned to `minecraftVersion("26.2")` in build.gradle.kts; bump to 26.3 to match the target before release).
+- Run server: `./gradlew runServer` (pinned to `minecraftVersion("26.3")` in build.gradle.kts, matching the target).
 - Compile only: `./gradlew compileJava`.
-- Test server (promoted path): from `C:\Tools\global-test-server-26.3`, run `.\TestServer.ps1 setup`, `deploy authmePAL` (build, copy jar to `plugins\`, full `restart` — never `plugman reload`), `status`, `verify`, `snapshot [name]`, `reset [name]` / `reset -Fresh`, `stop`; `-Help` prints the exact command table and MCP usage map. `restart` only proves log readiness; Craftwire `list_instances` → `server_info` + a real assertion is required before claiming a pass. Player data is qcart-only (UUID `befc5d95-fd63-4cae-b0f5-7c2fb271c699`, 4 files): non-`Fresh` `reset` preserves it; `reset -Fresh` intentionally does not. AuthMe / AuthMePAL are **not installed by default** on the test server (removed 2026-11-25): `deploy authmePAL` is supported but deliberate, and AuthMe must be restored alongside it (hard dependency) for the plugin to enable.
+- Test server (promoted path): from `C:\Tools\global-test-server-26.3`, run `.\TestServer.ps1 setup`, `status`, `verify`, `snapshot [name]`, `reset [name]` / `reset -Fresh`, `stop`; `-Help` prints the exact command table and MCP usage map. `restart` only proves log readiness; Craftwire `list_instances` → `server_info` + a real assertion is required before claiming a pass. Player data is qcart-only (UUID `befc5d95-fd63-4cae-b0f5-7c2fb271c699`, 4 files): non-`Fresh` `reset` preserves it; `reset -Fresh` intentionally does not. This branch is standalone: AuthMe / AuthMePAL are **not installed by default** on the test server (removed 2026-11-25), and deploy means building and copying the login-core shadow jar manually because `TestServer.ps1 deploy authmePAL` is broken after the rename. PacketEvents remains a hard plugin dependency.
 - Shared test server and Minecraft MCP usage: `../GLOBAL_TEST_SERVER.md` (the old `run/` dir was removed; copy the built jar into the global server's `plugins/`). When `qcart` is testing in-game and you need to act on their chat messages, use the qcart chat bridge (launch daemon, watch `qcart-inbox.jsonl`) — procedure in `../GLOBAL_TEST_SERVER.md`.
 
 ## Architecture
 
-- Packages: `org.authmePAL.authme`, `command`, `decision`, `handshake`, `migration`, `mojang`, `session`, `storage`.
+- Packages: `com.hizeric.logincore.*` — `authme`, `command`, `decision`, `handshake`, `migration`, `mojang`, `session`, `storage`.
 - Handshake/session/storage are the core; migration handles legacy data.
 
 ## Critical gotchas
@@ -31,7 +31,7 @@ Project-specific agent instructions for **authmePAL** (Paper authentication plug
 ## Agent notes
 
 - Read AGENTS.md first (subagents start fresh).
-- mempalace: query before answering about prior decisions for authmePAL (if stored).
+- mempalace: query before answering about prior decisions for login-core (the `authmePAL` wing is legacy).
 - MCP usage (summary; verbatim in `README.md` / `GLOBAL_TEST_SERVER.md` / `-Help`): Craftwire owns E2E (shared hub 7777; `list_instances` → `server_info`, bots, `gui_read`, `scenario_run`, `exceptions`, `logs`, `world_edit`, `server_eval`; green handshake ≠ pass); `TestServer.ps1` owns files/processes; minecraft-paper (WS 25575) / minecraft-developer (HTTP 25374, token in `plugins/DeveloperMCP/config.yml`) own live inspection; minecode (version-exact commands/data/SNBT) / minecraft-dev (source/mappings/mixin/JAR, `mojmap` for 26.x) own syntax/source; mempalace/context7/exa/caveman are memory/docs/web/compression, not server-specific.
 - For visual verification (HUD/GUI screenshots) on the global test server, start a hidden Craftwire **client** instance with `client_process start` — bots have no renderer and cannot screenshot. Procedure: `../shenanigans-core/docs/agents/craftwire-client-capture.md`.
 

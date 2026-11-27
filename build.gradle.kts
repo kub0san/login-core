@@ -2,6 +2,7 @@ import java.nio.charset.StandardCharsets
 
 plugins {
     id("java-library")
+    id("com.gradleup.shadow") version "9.6.1"
     id("xyz.jpenilla.run-paper") version "3.1.0"
 }
 
@@ -13,16 +14,18 @@ repositories {
 }
 
 base {
-    archivesName.set("AuthMePAL")
+    archivesName.set("login-core")
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:26.2.build.+")
-    compileOnly("com.github.retrooper:packetevents-spigot:2.13.0")
-    compileOnly("fr.xephi:authme-core:6.0.1")
+    compileOnly("io.papermc.paper:paper-api:26.3.build.200-stable")
+    compileOnly("com.github.retrooper:packetevents-spigot:2.14.0")
 
     testImplementation(platform("org.junit:junit-bom:5.10.2"))
     testImplementation("org.junit.jupiter:junit-jupiter:5.10.2")
+    testImplementation("io.papermc.paper:paper-api:26.3.build.200-stable")
+    testImplementation("com.github.retrooper:packetevents-spigot:2.14.0")
+    testImplementation("org.mockbukkit.mockbukkit:mockbukkit-v26.3:4.126.0")
     testImplementation("io.netty:netty-transport:4.1.72.Final")
     testImplementation("io.netty:netty-codec:4.1.72.Final")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.10.2")
@@ -39,16 +42,26 @@ tasks {
         options.encoding = "UTF-8"
     }
 
+    // Plain jar writes the same filename and would clobber the shaded jar.
+    named<Jar>("jar") { enabled = false }
+
+    shadowJar {
+        archiveClassifier.set("")
+        // do not relocate org.sqlite — JNI loads by class name
+    }
+
+    named("build") { dependsOn("shadowJar") }
+
     // Guard against silent source corruption. Windows PowerShell 5.1 writes files as
     // ASCII by default, which turns characters like the section sign into '?' and
     // quietly breaks regexes and message formatting. Any source file that is not
     // valid UTF-8, or that contains the replacement character, fails the build.
     register("checkSourceEncoding") {
         group = "verification"
-        description = "Fails the build if any source or resource file is not valid UTF-8."
-        val sourceDirs = listOf("src/main/java", "src/main/resources")
+        description = "Fails the build if any main/test source or resource file (.java, .yml, .yaml, .md, .properties, .json, .txt) is not valid UTF-8."
+        val sourceDirs = listOf("src/main/java", "src/main/resources", "src/test/java", "src/test/resources")
         val files = sourceDirs.map { dir ->
-            fileTree(dir) { include("**/*.java", "**/*.yml", "**/*.yaml", "**/*.md") }
+            fileTree(dir) { include("**/*.java", "**/*.yml", "**/*.yaml", "**/*.md", "**/*.properties", "**/*.json", "**/*.txt") }
         }
         inputs.files(files)
         outputs.upToDateWhen { false }
@@ -78,7 +91,7 @@ tasks {
     }
 
     runServer {
-        minecraftVersion("26.2")
+        minecraftVersion("26.3")
         jvmArgs("-Xms2G", "-Xmx2G")
     }
 
