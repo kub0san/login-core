@@ -24,9 +24,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MigrationAudit implements AutoCloseable {
 
-    public record ExemptionReport(int added, int skippedPremium) {
-    }
-
     private static final String HEADER = "name,status,mojang_uuid,last_login,last_ip,registered_at";
 
     private final JavaPlugin plugin;
@@ -69,39 +66,6 @@ public final class MigrationAudit implements AutoCloseable {
                 throw new CompletionException(ex);
             } finally {
                 running.set(false);
-            }
-        }, executor);
-    }
-
-    public CompletableFuture<ExemptionReport> applyPremiumNameExemptions(Set<String> exceptNames, String addedBy) {
-        return CompletableFuture.supplyAsync(() -> {
-            try {
-                Path audit = latestAudit();
-                if (audit == null) {
-                    throw new IllegalStateException("No migration audit exists. Run /logincore migrate audit first.");
-                }
-                int added = 0;
-                int skippedPremium = 0;
-                for (String line : Files.readAllLines(audit, StandardCharsets.UTF_8).stream().skip(1).toList()) {
-                    String[] columns = parseCsvLine(line);
-                    if (columns.length < 2 || !"PREMIUM_NAME".equals(columns[1])) {
-                        continue;
-                    }
-                    String normalizedName = columns[0].toLowerCase(Locale.ROOT);
-                    if (exceptNames.contains(normalizedName)) {
-                        continue;
-                    }
-                    // An exemption must never neutralize an authoritative PREMIUM classification.
-                    if ("PREMIUM".equals(storage.classification(normalizedName).join().orElse(null))) {
-                        skippedPremium++;
-                        continue;
-                    }
-                    storage.addExempt(columns[0], "Migration audit premium-name conflict", addedBy).join();
-                    added++;
-                }
-                return new ExemptionReport(added, skippedPremium);
-            } catch (IOException ex) {
-                throw new CompletionException(ex);
             }
         }, executor);
     }

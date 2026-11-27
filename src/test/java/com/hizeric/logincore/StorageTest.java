@@ -36,10 +36,10 @@ class StorageTest {
     Path temporaryDirectory;
 
     @Test
-    void persistsNormalizedLinksAndExemptNames() throws Exception {
-        try (Storage storage = new Storage(temporaryDirectory.resolve("accounts.db"))) {
+    void persistsNormalizedLinks() throws Exception {
+        Path database = temporaryDirectory.resolve("accounts.db");
+        try (Storage storage = new Storage(database)) {
             storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-            storage.addExempt("SomeName", "legacy account", "operator").get();
 
             Storage.AccountState account = storage.account("NOTCH").get();
             Storage.Summary summary = storage.summary().get();
@@ -47,14 +47,11 @@ class StorageTest {
             assertTrue(account.link().isPresent());
             assertEquals("notch", account.link().orElseThrow().name());
             assertEquals("AUTO", account.link().orElseThrow().source());
-            assertFalse(account.exempt());
-            assertTrue(storage.account("somename").get().exempt());
             assertEquals(1, summary.links());
-            assertEquals(1, summary.exemptNames());
             assertTrue(storage.unlink("NOTCH").get());
-            assertTrue(storage.removeExempt("SOMENAME").get());
             assertEquals(0, storage.summary().get().links());
         }
+        assertFalse(hasTable(database, "exempt"), "the exempt table must not survive opening storage");
     }
 
     @Test
@@ -196,7 +193,7 @@ class StorageTest {
     void newerSchemaVersionIsRejected() throws Exception {
         Path database = temporaryDirectory.resolve("newer-schema.db");
         try (Connection connection = open(database); Statement statement = connection.createStatement()) {
-            statement.execute("PRAGMA user_version = 2");
+            statement.execute("PRAGMA user_version = 3");
         }
 
         SQLException failure = assertThrows(SQLException.class, () -> new Storage(database));
@@ -204,7 +201,7 @@ class StorageTest {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
             messages.append(cause.getMessage()).append('\n');
         }
-        assertTrue(messages.toString().contains("user_version 2"));
+        assertTrue(messages.toString().contains("user_version 3"));
         assertTrue(messages.toString().contains("newer login-core"));
     }
 
@@ -216,7 +213,7 @@ class StorageTest {
         try (Storage storage = new Storage(database)) {
             assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
             assertFalse(hasColumn(database, "links", "classification"));
-            assertEquals(1, userVersion(database));
+            assertEquals(2, userVersion(database));
             assertEquals(1, backups(database).size(), "startup takes exactly one backup before the migration DDL");
         }
     }
@@ -228,7 +225,7 @@ class StorageTest {
             assertEquals(0, storage.summary().get().links());
         }
         assertTrue(backups(database).isEmpty(), "no pre-existing file means nothing to back up");
-        assertEquals(1, userVersion(database));
+        assertEquals(2, userVersion(database));
     }
 
     @Test
@@ -246,7 +243,7 @@ class StorageTest {
             assertEquals("PREMIUM", second.classification("notch").get().orElseThrow());
         }
         assertEquals(afterFirst, backups(database), "a second startup must not take another backup");
-        assertEquals(1, userVersion(database));
+        assertEquals(2, userVersion(database));
     }
 
     @Test
@@ -389,7 +386,6 @@ class StorageTest {
             Storage.MigrationReport report = storage.migrateLegacyClassification().get();
 
             assertEquals(1, report.classifiedPremium());
-            assertEquals(0, report.leftUnclassified());
             assertEquals(0, report.alreadyClassified());
             assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
         }
@@ -399,12 +395,12 @@ class StorageTest {
     void legacyAccountWithoutLinkStaysUnclassified() throws Exception {
         Path database = temporaryDirectory.resolve("migration-unclassified.db");
         try (Storage storage = new Storage(database); Connection connection = open(database)) {
-            storage.addExempt("LegacyGuy", "legacy account", "operator").get();
+            storage.registerPlayer("LegacyGuy", "password").get();
 
             Storage.MigrationReport report = storage.migrateLegacyClassification().get();
 
             assertEquals(0, report.classifiedPremium());
-            assertEquals(1, report.leftUnclassified());
+            assertEquals(0, report.alreadyClassified());
             assertTrue(storage.classification("legacyguy").get().isEmpty());
             assertNull(classification(connection, "legacyguy"));
         }
@@ -453,7 +449,7 @@ class StorageTest {
              Connection connection = open(database);
              Statement statement = connection.createStatement()) {
             storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-            storage.addExempt("LegacyGuy", "legacy account", "operator").get();
+            storage.registerPlayer("LegacyGuy", "password").get();
 
             storage.migrateLegacyClassification().get();
 
@@ -517,6 +513,17 @@ class StorageTest {
     private static Connection open(Path database) throws Exception {
         Class.forName("org.sqlite.JDBC");
         return DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath());
+    }
+
+    private static boolean hasTable(Path database, String table) throws Exception {
+        try (Connection connection = open(database);
+             PreparedStatement statement = connection.prepareStatement(
+                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")) {
+            statement.setString(1, table);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
     }
 
     private static boolean hasColumn(Path database, String table, String column) throws Exception {

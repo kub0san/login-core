@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class Storage implements AutoCloseable {
 
-    private static final int CURRENT_SCHEMA_VERSION = 1;
+    private static final int CURRENT_SCHEMA_VERSION = 2;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "login-core-SQLite");
@@ -77,14 +77,6 @@ public final class Storage implements AutoCloseable {
                         linked_at INTEGER NOT NULL,
                         last_verified_at INTEGER NOT NULL,
                         source TEXT NOT NULL
-                    )
-                    """);
-                statement.executeUpdate("""
-                    CREATE TABLE IF NOT EXISTS exempt (
-                        name_lower TEXT PRIMARY KEY,
-                        reason TEXT,
-                        added_at INTEGER NOT NULL,
-                        added_by TEXT NOT NULL
                     )
                     """);
                 // AuthMe schema compatibility (upstream sql-initialize.sql:3-25). Only
@@ -176,6 +168,8 @@ public final class Storage implements AutoCloseable {
                                 SELECT RAISE(ABORT, 'classification is immutable');
                             END
                             """);
+                        // Exemptions are never re-imported: classification is the only identity signal.
+                        statement.executeUpdate("DROP TABLE IF EXISTS exempt");
                         // Stamped last, inside the same transaction, so a partial migration is never marked done.
                         statement.execute("PRAGMA user_version = " + CURRENT_SCHEMA_VERSION);
                         connection.commit();
@@ -200,19 +194,7 @@ public final class Storage implements AutoCloseable {
     }
 
     public CompletableFuture<AccountState> account(String name) {
-        String normalized = normalize(name);
-        return submit(() -> {
-            Optional<Link> link = findLink(normalized);
-            boolean exempt;
-            try (PreparedStatement statement = connection.prepareStatement(
-                "SELECT 1 FROM exempt WHERE name_lower = ?")) {
-                statement.setString(1, normalized);
-                try (ResultSet result = statement.executeQuery()) {
-                    exempt = result.next();
-                }
-            }
-            return new AccountState(link, exempt);
-        });
+        return submit(() -> new AccountState(findLink(normalize(name))));
     }
 
     public CompletableFuture<Optional<Link>> link(String name) {
@@ -435,18 +417,8 @@ public final class Storage implements AutoCloseable {
                     linkedNames.add(result.getString(1));
                 }
             }
-            List<String> unlinkedNames = new ArrayList<>();
-            try (PreparedStatement statement = connection.prepareStatement("""
-                SELECT name_lower FROM exempt WHERE name_lower NOT IN (SELECT name_lower FROM links)
-                ORDER BY name_lower
-                """); ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    unlinkedNames.add(result.getString(1));
-                }
-            }
-
             Path backup = null;
-            if (!linkedNames.isEmpty() || !unlinkedNames.isEmpty() || countRows("account_classification") > 0) {
+            if (!linkedNames.isEmpty() || countRows("account_classification") > 0) {
                 backup = backupDatabase();
             }
 
@@ -470,7 +442,7 @@ public final class Storage implements AutoCloseable {
             } finally {
                 connection.setAutoCommit(autoCommit);
             }
-            return new MigrationReport(classified, unlinkedNames.size(), already, backup);
+            return new MigrationReport(classified, already, backup);
         });
     }
 
@@ -556,49 +528,12 @@ public final class Storage implements AutoCloseable {
         });
     }
 
-    public CompletableFuture<Boolean> addExempt(String name, String reason, String addedBy) {
-        return submit(() -> {
-            try (PreparedStatement statement = connection.prepareStatement("""
-                INSERT INTO exempt (name_lower, reason, added_at, added_by) VALUES (?, ?, ?, ?)
-                ON CONFLICT(name_lower) DO UPDATE SET reason = excluded.reason, added_by = excluded.added_by
-                """)) {
-                statement.setString(1, normalize(name));
-                statement.setString(2, reason);
-                statement.setLong(3, Instant.now().toEpochMilli());
-                statement.setString(4, addedBy);
-                return statement.executeUpdate() > 0;
-            }
-        });
-    }
-
-    public CompletableFuture<Boolean> removeExempt(String name) {
-        return submit(() -> {
-            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM exempt WHERE name_lower = ?")) {
-                statement.setString(1, normalize(name));
-                return statement.executeUpdate() > 0;
-            }
-        });
-    }
-
-    public CompletableFuture<List<String>> exemptNames() {
-        return submit(() -> {
-            List<String> names = new ArrayList<>();
-            try (PreparedStatement statement = connection.prepareStatement("SELECT name_lower FROM exempt ORDER BY name_lower");
-                 ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    names.add(result.getString(1));
-                }
-            }
-            return List.copyOf(names);
-        });
-    }
-
     public CompletableFuture<Summary> summary() {
-        return submit(() -> new Summary(countRows("links"), countRows("exempt"), countRows("account_classification")));
+        return submit(() -> new Summary(countRows("links"), countRows("account_classification")));
     }
 
     private int countRows(String table) throws SQLException {
-        if (!"links".equals(table) && !"exempt".equals(table) && !"account_classification".equals(table)) {
+        if (!"links".equals(table) && !"account_classification".equals(table)) {
             throw new IllegalArgumentException("Unsupported table name");
         }
         try (Statement statement = connection.createStatement();
@@ -746,14 +681,13 @@ public final class Storage implements AutoCloseable {
     public record PlayerInfo(Optional<Instant> lastLogin, Optional<String> lastIp, Instant registeredAt) {
     }
 
-    public record AccountState(Optional<Link> link, boolean exempt) {
+    public record AccountState(Optional<Link> link) {
     }
 
-    public record Summary(int links, int exemptNames, int classifications) {
+    public record Summary(int links, int classifications) {
     }
 
-    public record MigrationReport(int classifiedPremium, int leftUnclassified, int alreadyClassified,
-                                  Path backupPath) {
+    public record MigrationReport(int classifiedPremium, int alreadyClassified, Path backupPath) {
     }
 
     public enum ClassificationResult { SET, ALREADY_SAME, ALREADY_DIFFERENT }

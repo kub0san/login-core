@@ -17,6 +17,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AdminCommandTest {
@@ -34,7 +35,7 @@ class AdminCommandTest {
             (proxy, method, args) -> "hasPermission".equals(method.getName()) ? Boolean.TRUE : null);
 
         // The command's own root arg list, as exposed by tab completion, is the registered subcommand set.
-        assertEquals(List.of("status", "exempt", "migrate"),
+        assertEquals(List.of("status", "migrate"),
             command.onTabComplete(sender, null, "logincore", new String[]{""}));
     }
 
@@ -49,6 +50,7 @@ class AdminCommandTest {
                 storage.classification("Notch").get());
 
             assertTrue(line.contains("classification: PREMIUM"), line);
+            assertFalse(line.contains("exempt"), line);
             assertEquals("PREMIUM", storage.classification("NOTCH").get().orElseThrow());
             assertEquals(1, storage.summary().get().classifications());
         }
@@ -94,9 +96,6 @@ class AdminCommandTest {
                 CommandSender sender = sender();
                 for (String[] args : new String[][]{
                     {"status"},
-                    {"exempt", "add", "ExemptGuy"},
-                    {"exempt", "list"},
-                    {"exempt", "remove", "ExemptGuy"},
                     {"migrate", "audit"},
                     {"migrate", "classify"}
                 }) {
@@ -126,9 +125,6 @@ class AdminCommandTest {
                 CommandSender sender = sender();
                 for (String[] args : new String[][]{
                     {"status"},
-                    {"exempt", "add", "ExemptGuy"},
-                    {"exempt", "list"},
-                    {"exempt", "remove", "ExemptGuy"},
                     {"migrate", "audit"},
                     {"migrate", "classify"}
                 }) {
@@ -153,7 +149,7 @@ class AdminCommandTest {
         try (Storage storage = new Storage(temporaryDirectory.resolve("classify.db"))) {
             storage.putLink("LinkedGuy", UUID_TEXT, "LinkedGuy", "AUTO").get();
             storage.setClassification("OfflineGuy", "OFFLINE").get();
-            storage.addExempt("ExemptGuy", "migration", "operator").get();
+            storage.registerPlayer("UnlinkedGuy", "password").get();
             MigrationAudit audit = audit(storage, temporaryDirectory.resolve("data"));
             ExecutorService workers = Executors.newSingleThreadExecutor();
             try {
@@ -164,8 +160,8 @@ class AdminCommandTest {
 
                 assertEquals("PREMIUM", storage.classification("LinkedGuy").get().orElseThrow());
                 assertEquals("OFFLINE", storage.classification("OfflineGuy").get().orElseThrow());
-                assertTrue(storage.classification("ExemptGuy").get().isEmpty(),
-                    "an unlinked exempt name stays unclassified");
+                assertTrue(storage.classification("UnlinkedGuy").get().isEmpty(),
+                    "an unlinked name stays unclassified");
                 assertTrue(storage.classification("FreshGuy").get().isEmpty());
                 assertEquals(2, storage.summary().get().classifications(), "migrate classify never writes OFFLINE");
             } finally {

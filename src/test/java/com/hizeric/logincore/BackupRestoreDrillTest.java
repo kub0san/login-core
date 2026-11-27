@@ -34,10 +34,8 @@ class BackupRestoreDrillTest {
 
         try (Storage restored = new Storage(database)) {
             assertTrue(restored.classification("notch").get().isEmpty(), "linked name was classified before the backup");
-            assertTrue(restored.classification("legacyguy").get().isEmpty(), "exempt name must stay unclassified");
             assertEquals(0, restored.summary().get().classifications());
             assertTrue(restored.link("notch").get().isPresent(), "link survives the restore");
-            assertTrue(restored.account("legacyguy").get().exempt(), "exemption survives the restore");
         }
     }
 
@@ -50,14 +48,12 @@ class BackupRestoreDrillTest {
         try (Storage restored = new Storage(database)) {
             Storage.MigrationReport first = restored.migrateLegacyClassification().get();
             assertEquals(1, first.classifiedPremium());
-            assertEquals(1, first.leftUnclassified());
             assertEquals(0, first.alreadyClassified());
 
             Storage.MigrationReport second = restored.migrateLegacyClassification().get();
             assertEquals(0, second.classifiedPremium());
             assertEquals(1, second.alreadyClassified());
             assertEquals("PREMIUM", restored.classification("notch").get().orElseThrow());
-            assertTrue(restored.classification("legacyguy").get().isEmpty());
         }
     }
 
@@ -66,7 +62,6 @@ class BackupRestoreDrillTest {
         Path database = temporaryDirectory.resolve("failed-backup.db");
         try (Storage storage = new Storage(database)) {
             storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-            storage.addExempt("LegacyGuy", "legacy account", "operator").get();
 
             // Redirect the copy source/target to a location that cannot exist, so backup fails
             // before any classification is written.
@@ -84,7 +79,6 @@ class BackupRestoreDrillTest {
                 "the migration must fail at the backup step");
 
             assertTrue(storage.classification("notch").get().isEmpty());
-            assertTrue(storage.classification("legacyguy").get().isEmpty());
             assertEquals(0, storage.summary().get().classifications());
         }
     }
@@ -92,7 +86,6 @@ class BackupRestoreDrillTest {
     private Storage.MigrationReport migrateAndBackUp(Path database) throws Exception {
         try (Storage storage = new Storage(database)) {
             storage.putLink("NoTcH", UUID, "Notch", "AUTO").get();
-            storage.addExempt("LegacyGuy", "legacy account", "operator").get();
             return storage.migrateLegacyClassification().get();
         }
     }

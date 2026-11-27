@@ -13,23 +13,19 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 
 public final class AdminCommand implements CommandExecutor, TabCompleter {
 
-    private static final List<String> ROOT_ARGUMENTS = List.of("status", "exempt", "migrate");
-    private static final List<String> MIGRATION_ARGUMENTS = List.of("audit", "apply", "classify");
-    private static final List<String> EXEMPT_ARGUMENTS = List.of("add", "remove", "list");
+    private static final List<String> ROOT_ARGUMENTS = List.of("status", "migrate");
+    private static final List<String> MIGRATION_ARGUMENTS = List.of("audit", "classify");
 
     private final JavaPlugin plugin;
     private final Storage storage;
@@ -65,7 +61,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
             return true;
         }
         switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "exempt" -> handleExempt(sender, args);
             case "migrate" -> handleMigrate(sender, args);
             default -> usage(sender);
         }
@@ -83,29 +78,9 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
         if (args.length == 2) {
             return switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "status" -> matching(knownPlayerNames(), args[1]);
-                case "exempt" -> matching(EXEMPT_ARGUMENTS, args[1]);
                 case "migrate" -> matching(MIGRATION_ARGUMENTS, args[1]);
                 default -> List.of();
             };
-        }
-        if (args.length == 3 && "exempt".equalsIgnoreCase(args[0])
-            && ("add".equalsIgnoreCase(args[1]) || "remove".equalsIgnoreCase(args[1]))) {
-            return matching(knownPlayerNames(), args[2]);
-        }
-        if (args.length == 3 && "migrate".equalsIgnoreCase(args[0])
-            && "apply".equalsIgnoreCase(args[1])) {
-            return matching(List.of("--exempt-conflicts"), args[2]);
-        }
-        if (args.length == 4 && "migrate".equalsIgnoreCase(args[0])
-            && "apply".equalsIgnoreCase(args[1])
-            && "--exempt-conflicts".equalsIgnoreCase(args[2])) {
-            return matching(List.of("--except"), args[3]);
-        }
-        if (args.length == 5 && "migrate".equalsIgnoreCase(args[0])
-            && "apply".equalsIgnoreCase(args[1])
-            && "--exempt-conflicts".equalsIgnoreCase(args[2])
-            && "--except".equalsIgnoreCase(args[3])) {
-            return matching(knownPlayerNames(), args[4]);
         }
         return List.of();
     }
@@ -135,7 +110,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
             }
             MojangClient.Metrics lookups = mojang.metrics();
             LoginMetrics.Snapshot handshakes = loginMetrics.snapshot();
-            sender.sendMessage(ChatColor.GRAY + "Links: " + summary.links() + ", exempt names: " + summary.exemptNames());
+            sender.sendMessage(ChatColor.GRAY + "Links: " + summary.links());
             sender.sendMessage(ChatColor.GRAY + "Lookups: " + lookups.lookupCalls() + ", cache hits: "
                 + lookups.cacheHits() + ", HTTP requests: " + lookups.httpRequests() + ", HTTP 429s: "
                 + lookups.rateLimitedResponses());
@@ -177,46 +152,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
         String conflict = uuidLink.filter(value -> account.link().isEmpty())
             .map(value -> ", linked-name: " + value.name()).orElse("");
         return "AuthMe registered: " + registered + ", link: " + link + conflict
-            + ", exempt: " + account.exempt() + ", classification: " + classification.orElse("UNCLASSIFIED");
-    }
-
-    private void handleExempt(CommandSender sender, String[] args) {
-        if (args.length == 2 && "list".equalsIgnoreCase(args[1])) {
-            storage.exemptNames().whenComplete((names, error) -> onMain(sender, () -> {
-                if (error != null) {
-                    reportError(sender, error);
-                } else if (names.isEmpty()) {
-                    sender.sendMessage(ChatColor.GRAY + "No exempt names.");
-                } else {
-                    sender.sendMessage(ChatColor.GOLD + "Exempt names: " + String.join(", ", names));
-                }
-            }));
-            return;
-        }
-        if (args.length != 3 || (!"add".equalsIgnoreCase(args[1]) && !"remove".equalsIgnoreCase(args[1]))) {
-            usage(sender);
-            return;
-        }
-        String name = args[2];
-        if ("add".equalsIgnoreCase(args[1])) {
-            storage.addExempt(name, "Added by administrator", sender.getName())
-                .whenComplete((added, error) -> onMain(sender, () -> {
-                    if (error != null) {
-                        reportError(sender, error);
-                    } else {
-                        sender.sendMessage(ChatColor.GREEN + "Exemption saved for " + name + ".");
-                    }
-                }));
-        } else {
-            storage.removeExempt(name).whenComplete((removed, error) -> onMain(sender, () -> {
-                if (error != null) {
-                    reportError(sender, error);
-                } else {
-                    sender.sendMessage(removed ? ChatColor.GREEN + "Exemption removed for " + name + "."
-                        : ChatColor.YELLOW + "No exemption was found for " + name + ".");
-                }
-            }));
-        }
+            + ", classification: " + classification.orElse("UNCLASSIFIED");
     }
 
     private void handleMigrate(CommandSender sender, String[] args) {
@@ -227,8 +163,7 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
                     return;
                 }
                 sender.sendMessage(ChatColor.GREEN + "Legacy classification: classified " + report.classifiedPremium()
-                    + " PREMIUM, left " + report.leftUnclassified() + " unclassified, already classified "
-                    + report.alreadyClassified() + ".");
+                    + " PREMIUM, already classified " + report.alreadyClassified() + ".");
                 sender.sendMessage(ChatColor.GRAY + "Backup: "
                     + (report.backupPath() == null ? "none (empty database)" : report.backupPath()));
             }));
@@ -243,29 +178,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
                     sender.sendMessage(ChatColor.GREEN + "Migration audit saved to " + path + ".");
                 }
             }));
-            return;
-        }
-        if (args.length >= 3 && "apply".equalsIgnoreCase(args[1])
-            && "--exempt-conflicts".equalsIgnoreCase(args[2])) {
-            Set<String> exceptNames = Set.of();
-            if (args.length == 5 && "--except".equalsIgnoreCase(args[3])) {
-                exceptNames = Arrays.stream(args[4].split(","))
-                    .map(value -> value.toLowerCase(Locale.ROOT))
-                    .collect(Collectors.toUnmodifiableSet());
-            } else if (args.length != 3) {
-                usage(sender);
-                return;
-            }
-            migrationAudit.applyPremiumNameExemptions(exceptNames, sender.getName())
-                .whenComplete((report, error) -> onMain(sender, () -> {
-                    if (error != null) {
-                        reportError(sender, error);
-                    } else {
-                        sender.sendMessage(ChatColor.GREEN + "Added " + report.added()
-                            + " migration exemptions; skipped " + report.skippedPremium()
-                            + " premium-classified name(s).");
-                    }
-                }));
             return;
         }
         usage(sender);
@@ -292,8 +204,6 @@ public final class AdminCommand implements CommandExecutor, TabCompleter {
 
     private void usage(CommandSender sender) {
         sender.sendMessage(ChatColor.YELLOW + "/logincore status [name]");
-        sender.sendMessage(ChatColor.YELLOW + "/logincore exempt add|remove <name> | exempt list");
-        sender.sendMessage(ChatColor.YELLOW + "/logincore migrate audit | migrate apply --exempt-conflicts [--except name,name]");
-        sender.sendMessage(ChatColor.YELLOW + "/logincore migrate classify");
+        sender.sendMessage(ChatColor.YELLOW + "/logincore migrate audit | migrate classify");
     }
 }
