@@ -1,0 +1,35 @@
+[2026-11-27T08:43:32] RUN_DIR=C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332
+[2026-11-27T08:43:32] BASELINE=standalone-e2e-20261127-074844
+[2026-11-27T08:43:32] preflight: stop any existing server
+[2026-11-27T08:43:33] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 stop
+[2026-11-27T08:43:33] preflight: artifact scan
+[2026-11-27T08:43:33] preflight: no AuthMe/Seam jar or data folder
+[2026-11-27T08:43:33] preflight: jar gate
+[2026-11-27T08:43:33] jar gate: sha256=85BE1C6905BF5361D9973A43D13FA5F68A642939CF3BF9834AE5BBABA1DB10AE frXephiEntries=0 depend=[packetevents]
+[2026-11-27T08:43:33] preflight: copied built shadow jar to plugins\login-core-standalone.jar
+[2026-11-27T08:43:33] server: restart in this shell
+[2026-11-27T08:44:17] exit=0 detached command=TestServer.ps1 restart 
+[2026-11-27T08:44:19] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 status
+[2026-11-27T08:44:19] exit=1 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 verify
+[2026-11-27T08:44:19] Craftwire: discover server instance
+[2026-11-27T08:44:20] Craftwire list_instances exit=0
+[2026-11-27T08:44:20] Craftwire instance=server-9
+[2026-11-27T08:44:22] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch-call.ps1 -InFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\preflight.batch.json -OutFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\preflight.result.json
+[2026-11-27T08:44:22] batch preflight: results=7 toolErrors=0
+[2026-11-27T08:44:22] batch preflight: unexpectedErrors=0 allowedCodes=
+[2026-11-27T08:44:30] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch-call.ps1 -InFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass1.batch.json -OutFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass1.result.json
+[2026-11-27T08:44:30] batch pass1: results=15 toolErrors=0
+[2026-11-27T08:44:30] batch pass1: unexpectedErrors=0 allowedCodes=
+[2026-11-27T08:44:47] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch-call.ps1 -InFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass2.batch.json -OutFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass2.result.json
+[2026-11-27T08:44:47] batch pass2: results=20 toolErrors=5
+[2026-11-27T08:44:47] batch pass2: unexpectedErrors=0 allowedCodes=BOT_NOT_FOUND
+[2026-11-27T08:45:51] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Users\marcus panget\AppData\Local\Temp\opencode\cw-batch-call.ps1 -InFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass3.batch.json -OutFile C:\Users\marcus panget\AppData\Local\Temp\opencode\standalone-e2e-20261127-084332\pass3.result.json
+[2026-11-27T08:45:51] batch pass3: results=5 toolErrors=0
+[2026-11-27T08:45:51] batch pass3: unexpectedErrors=0 allowedCodes=
+[2026-11-27T08:45:51] E2E batches complete; latest.log copied to evidence
+[2026-11-27T08:45:51] cleanup: stopping server
+[2026-11-27T08:45:56] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 stop
+[2026-11-27T08:45:56] cleanup: removed plugins\AuthMe data folder created by the standalone plugin
+[2026-11-27T08:45:56] cleanup: removed deployed login-core-standalone.jar
+[2026-11-27T08:45:59] exit=0 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 status
+[2026-11-27T08:45:59] exit=1 command=powershell -NoProfile -ExecutionPolicy Bypass -File C:\Tools\global-test-server-26.3\TestServer.ps1 verify

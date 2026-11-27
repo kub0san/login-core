@@ -1,0 +1,52 @@
+[
+    {
+        "tool":  "list_instances",
+        "args":  {
+
+                 }
+    },
+    {
+        "tool":  "server_info",
+        "args":  {
+                     "instance":  "server-9"
+                 }
+    },
+    {
+        "tool":  "plugin_manage",
+        "args":  {
+                     "action":  "list",
+                     "instance":  "server-9"
+                 }
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var B=Java.type(\u0027org.bukkit.Bukkit\u0027); var p=B.getPluginManager().getPlugin(\u0027AuthMe\u0027); print(\u0027plugin=\u0027+p.getName()+\u0027 version=\u0027+p.getDescription().getVersion()+\u0027 main=\u0027+p.getClass().getName()+\u0027 enabled=\u0027+p.isEnabled());"
+                 }
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var B=Java.type(\u0027org.bukkit.Bukkit\u0027); var m=B.getServer().getCommandMap().getKnownCommands(); var labels=[\u0027login\u0027,\u0027register\u0027,\u0027changepassword\u0027,\u0027logincore\u0027]; var out=[]; for(var i=0;i\u003clabels.length;i++){var n=labels[i]; var pc=B.getPluginCommand(n); var owner=pc ? pc.getPlugin().getName() : \u0027NONE\u0027; var c=m.get(n); out.push(n+\u0027 -\u003e \u0027+owner+\u0027 (\u0027+(c?c.getClass().getName():\u0027null\u0027)+\u0027)\u0027);} print(out.join(\u0027 | \u0027));"
+                 }
+    },
+    {
+        "tool":  "server_eval",
+        "args":  {
+                     "instance":  "server-9",
+                     "timeoutMs":  5000,
+                     "code":  "var C=Java.type(\u0027java.lang.Class\u0027); try{C.forName(\u0027fr.xephi.authme.api.v3.AuthMeApi\u0027); print(\u0027authmeClass=PRESENT\u0027);}catch(e){print(\u0027authmeClass=ABSENT\u0027);} var L=Java.type(\u0027com.hizeric.logincore.events.LoginEvent\u0027); var R=Java.type(\u0027com.hizeric.logincore.events.RegisterEvent\u0027); print(\u0027loginHandler=\u0027+(L.getHandlerList()!=null)+\u0027 registerHandler=\u0027+(R.getHandlerList()!=null));"
+                 }
+    },
+    {
+        "tool":  "exceptions",
+        "args":  {
+                     "instance":  "server-9",
+                     "limit":  20
+                 }
+    }
+]

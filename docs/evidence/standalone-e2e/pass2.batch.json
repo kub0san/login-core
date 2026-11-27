@@ -1,0 +1,191 @@
+[
+    {
+        "tool":  "bot_remove",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1"
+                 }
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "PwBot1"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "chat",
+                     "text":  "rejoin preauth"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/spawn"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwNew456"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 }
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "BruteBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "messages"
+                 }
+    },
+    {
+        "tool":  "bot_remove",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot"
+                 }
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "BruteBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "command",
+                     "command":  "/login WrongPass111"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "BruteBot",
+                     "action":  "messages"
+                 }
+    },
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 }
+    },
+    {
+        "tool":  "logs",
+        "args":  {
+                     "instance":  "server-9",
+                     "contains":  "failed login",
+                     "limit":  20
+                 }
+    }
+]

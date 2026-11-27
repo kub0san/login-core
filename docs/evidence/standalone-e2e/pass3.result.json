@@ -1,0 +1,63 @@
+[
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "TimeoutBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"spawned\\\":1,\\\"names\\\":\\\"TimeoutBot\\\",\\\"ms\\\":116}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "wait_for",
+        "args":  {
+                     "instance":  "server-9",
+                     "condition":  "log_match",
+                     "pattern":  "Login timed out",
+                     "timeoutMs":  75000
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"matched\\\":true,\\\"instance\\\":\\\"server-9\\\",\\\"condition\\\":\\\"log_match\\\",\\\"elapsedMs\\\":61346,\\\"event\\\":{\\\"type\\\":\\\"log\\\",\\\"time\\\":1795740351253,\\\"data\\\":{\\\"level\\\":\\\"INFO\\\",\\\"logger\\\":\\\"net.minecraft.server.network.ServerGamePacketListenerImpl\\\",\\\"thread\\\":\\\"Server thread\\\",\\\"message\\\":\\\"TimeoutBot lost connection: Login timed out. Reconnect and log in.\\\"}}}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"count\\\":1,\\\"joining\\\":0,\\\"bots\\\":[{\\\"name\\\":\\\"PwBot1\\\",\\\"kind\\\":\\\"plugin\\\",\\\"uuid\\\":\\\"f83e33e4-263a-3f9c-a84c-ee53d58d9070\\\",\\\"world\\\":\\\"world\\\",\\\"x\\\":0,\\\"y\\\":69,\\\"z\\\":0}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "logs",
+        "args":  {
+                     "instance":  "server-9",
+                     "contains":  "Login timed out",
+                     "limit":  20
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"instance\\\":\\\"server-9\\\",\\\"lines\\\":[{\\\"time\\\":1795740351253,\\\"level\\\":\\\"INFO\\\",\\\"logger\\\":\\\"net.minecraft.server.network.ServerGamePacketListenerImpl\\\",\\\"message\\\":\\\"TimeoutBot lost connection: Login timed out. Reconnect and log in.\\\"}]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    },
+    {
+        "tool":  "exceptions",
+        "args":  {
+                     "instance":  "server-9",
+                     "limit":  20
+                 },
+        "response":  "{\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"{\\\"total\\\":0,\\\"exceptions\\\":[]}\"}]},\"jsonrpc\":\"2.0\",\"id\":2}",
+        "isError":  false,
+        "exitCode":  0
+    }
+]

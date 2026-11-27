@@ -1,0 +1,141 @@
+[
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 }
+    },
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "PwBot1"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "chat",
+                     "text":  "preauth hello"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/spawn"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/logincore status"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/changepassword PwTest123 PwHack999"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "move_to",
+                     "x":  8,
+                     "y":  69,
+                     "z":  8,
+                     "timeoutMs":  3000
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "state"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/register PwTest123 PwTest123"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/register PwTest123 PwTest123"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/changepassword PwTest123 PwNew456"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwTest123"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "command",
+                     "command":  "/login PwNew456"
+                 }
+    },
+    {
+        "tool":  "bot_action",
+        "args":  {
+                     "instance":  "server-9",
+                     "bot":  "PwBot1",
+                     "action":  "messages"
+                 }
+    }
+]

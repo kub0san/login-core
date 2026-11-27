@@ -1,0 +1,48 @@
+[
+    {
+        "tool":  "bot_spawn",
+        "args":  {
+                     "instance":  "server-9",
+                     "kind":  "plugin",
+                     "names":  [
+                                   "TimeoutBot"
+                               ],
+                     "location":  {
+                                      "world":  "world",
+                                      "x":  0,
+                                      "y":  72,
+                                      "z":  0
+                                  }
+                 }
+    },
+    {
+        "tool":  "wait_for",
+        "args":  {
+                     "instance":  "server-9",
+                     "condition":  "log_match",
+                     "pattern":  "Login timed out",
+                     "timeoutMs":  75000
+                 }
+    },
+    {
+        "tool":  "bot_list",
+        "args":  {
+                     "instance":  "server-9"
+                 }
+    },
+    {
+        "tool":  "logs",
+        "args":  {
+                     "instance":  "server-9",
+                     "contains":  "Login timed out",
+                     "limit":  20
+                 }
+    },
+    {
+        "tool":  "exceptions",
+        "args":  {
+                     "instance":  "server-9",
+                     "limit":  20
+                 }
+    }
+]

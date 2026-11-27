@@ -1,0 +1,8 @@
+{
+    "jar":  "C:\\Projects\\.worktrees\\login-core-standalone\\build\\libs\\login-core-1.0-SNAPSHOT.jar",
+    "sha256":  "85BE1C6905BF5361D9973A43D13FA5F68A642939CF3BF9834AE5BBABA1DB10AE",
+    "frXephiEntries":  [
+
+                       ],
+    "pluginYml":  "name: AuthMe\nversion: \u00271.0-SNAPSHOT\u0027\nmain: com.hizeric.logincore.LoginCore\ndescription: Securely verifies Mojang account ownership and automates AuthMe logins on offline-mode Paper servers.\nauthors: [hizeric]\napi-version: \u002726.3\u0027\nload: POSTWORLD\ndepend: [packetevents]\nlibraries:\n  - org.xerial:sqlite-jdbc:3.50.3.0\ncommands:\n  logincore:\n    description: login-core administration\n    usage: /logincore \u003cstatus|exempt|migrate\u003e\n  login:\n    description: Log in to an offline account\n    usage: /login \u003cpassword\u003e\n  register:\n    description: Register an offline account\n    usage: /register \u003cpassword\u003e \u003cpassword\u003e\n  changepassword:\n    description: Change your offline account password\n    usage: /changepassword \u003cold\u003e \u003cnew\u003e\npermissions:\n  logincore.admin:\n    description: Allows administration of login-core\n    default: op\n"
+}
