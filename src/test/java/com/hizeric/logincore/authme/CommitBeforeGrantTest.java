@@ -1,6 +1,7 @@
 package com.hizeric.logincore.authme;
 
 import com.hizeric.logincore.TestPlugin;
+import com.hizeric.logincore.decision.LoginDecisionEngine;
 import com.hizeric.logincore.events.LoginEvent;
 import com.hizeric.logincore.events.RegisterEvent;
 import com.hizeric.logincore.mojang.MojangClient;
@@ -157,15 +158,28 @@ class CommitBeforeGrantTest {
     void renamedPremiumMigratesAndGrants() throws Exception {
         try (Storage storage = new Storage(temporaryDirectory.resolve("rename-migration.db"))) {
             storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
+            // Drive the session through the real decision: the squatted name is registered and
+            // OFFLINE-classified, so the premium must arrive as REGISTER_AND_AUTO_LOGIN.
+            LoginDecisionEngine.PostVerifyAction action = LoginDecisionEngine.decidePostVerify(
+                true, UUID.fromString(UUID_TEXT), true, null,
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE, "OFFLINE");
+            assertEquals(LoginDecisionEngine.PostVerifyAction.REGISTER_AND_AUTO_LOGIN, action);
+            boolean shouldRegister = action == LoginDecisionEngine.PostVerifyAction.REGISTER_AND_AUTO_LOGIN;
+            boolean requirePasswordOnce = action == LoginDecisionEngine.PostVerifyAction.REQUIRE_PASSWORD_ONCE;
             VerifiedSessions sessions = new VerifiedSessions();
-            sessions.put(session("new"));
+            sessions.put(new VerifiedSession(
+                "connection", "new", "127.0.0.1",
+                MojangClient.SessionResult.verified(UUID.fromString(UUID_TEXT), "new"),
+                Optional.empty(), true, shouldRegister, requirePasswordOnce, !requirePasswordOnce,
+                requirePasswordOnce ? "PASSWORD_ONCE" : "AUTO"));
             List<String> grants = new ArrayList<>();
             AuthMeLoginListener listener = listener(storage, sessions, grants);
             AsyncPlayerPreLoginEvent event = event("new");
 
             listener.onAsyncPreLogin(event);
 
-            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult(),
+                "a migrated premium must not be kicked as an already-existing account");
             assertEquals(List.of("new"), grants, "a migrated rename follows the normal grant path");
             assertTrue(storage.link("old").get().isEmpty(), "the old link must be released");
             assertEquals(UUID_TEXT, storage.link("new").get().orElseThrow().mojangUuid());

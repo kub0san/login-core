@@ -4,7 +4,10 @@ Status: Scenarios A and B are now handled by automatic premium-rename migration
 (see `docs/superpowers/specs/2026-11-28-premium-rename-migration-design.md`).
 
 ## Scenario A — Squatter offline account blocks premium owner
-RESOLVED. On the premium owner's verified join, `AuthMeLoginListener.commitIdentity` detects the
+RESOLVED (after decision-flow fix). The pre-handshake decision used to disconnect a name with
+an OFFLINE classification as soon as Mojang reported PREMIUM; it now proceeds to the verified
+handshake, and `decidePostVerify` accepts the premium instead of demanding the squatter's
+password. On the premium owner's verified join, `AuthMeLoginListener.commitIdentity` detects the
 rename and `Storage.migratePremiumRename` evicts the squatter in one transaction: the squatter's
 `authme` row is moved to `evicted_accounts` (keyed by a stable `account_token`), the name is
 freed, and the premium identity is written. The squatter keeps their login-core account

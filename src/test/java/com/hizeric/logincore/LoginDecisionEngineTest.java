@@ -119,7 +119,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE, null
             )
         );
     }
@@ -150,7 +150,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 null,
-                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE, null
             )
         );
     }
@@ -164,7 +164,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE, null
             )
         );
     }
@@ -178,7 +178,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 false,
                 null,
-                LoginDecisionEngine.ExistingAccountPolicy.DENY
+                LoginDecisionEngine.ExistingAccountPolicy.DENY, null
             )
         );
     }
@@ -192,7 +192,7 @@ class LoginDecisionEngineTest {
                 UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
                 true,
                 null,
-                LoginDecisionEngine.ExistingAccountPolicy.DENY
+                LoginDecisionEngine.ExistingAccountPolicy.DENY, null
             )
         );
     }
@@ -207,7 +207,7 @@ class LoginDecisionEngineTest {
                 uuid,
                 true,
                 uuid,
-                LoginDecisionEngine.ExistingAccountPolicy.DENY
+                LoginDecisionEngine.ExistingAccountPolicy.DENY, null
             )
         );
     }
@@ -221,7 +221,7 @@ class LoginDecisionEngineTest {
                 null,
                 false,
                 null,
-                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE, null
             )
         );
     }
@@ -244,14 +244,29 @@ class LoginDecisionEngineTest {
     }
 
     @Test
-    void storedOfflineCannotBecomePremium() {
+    void storedOfflinePremiumNameReachesHandshakeForMigration() {
         UUID premiumUuid = UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1");
         LoginDecisionEngine.DecisionInput input = new LoginDecisionEngine.DecisionInput(
             "Notch", true, LookupResult.premium(premiumUuid, "Notch"),
             false, null, premiumUuid, false, false, "OFFLINE"
         );
 
-        assertEquals(LoginDecisionEngine.Decision.DISCONNECT_NAME_RESERVED, LoginDecisionEngine.decide(input));
+        assertEquals(LoginDecisionEngine.Decision.HANDSHAKE_REQUIRED, LoginDecisionEngine.decide(input));
+    }
+
+    @Test
+    void verifiedPremiumOnOfflineClassifiedNameSkipsPasswordGuard() {
+        assertEquals(
+            LoginDecisionEngine.PostVerifyAction.REGISTER_AND_AUTO_LOGIN,
+            LoginDecisionEngine.decidePostVerify(
+                true,
+                UUID.fromString("069a79f4-44e9-4726-a5be-fca90e38a0e1"),
+                true,
+                null,
+                LoginDecisionEngine.ExistingAccountPolicy.REQUIRE_PASSWORD_ONCE,
+                "OFFLINE"
+            )
+        );
     }
 
     @Test

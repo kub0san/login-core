@@ -35,6 +35,8 @@ public final class LoginCore extends JavaPlugin {
     private PremiumSupport premiumSupport;
     private ExecutorService workers;
     private Storage storage;
+    private boolean migrationEnabled = true;
+    private boolean cookieEnabled = true;
 
     @Override
     public void onEnable() {
@@ -94,7 +96,7 @@ public final class LoginCore extends JavaPlugin {
             premiumSupport.registerBukkitEvents();
             AuthMeLoginListener authListener =
                 new AuthMeLoginListener(this, authState, storage, verifiedSessions,
-                    premiumSupport.release()::releaseAfterAuth);
+                    premiumSupport.release()::releaseAfterAuth, migrationEnabled, cookieEnabled);
             getServer().getPluginManager().registerEvents(authListener, this);
 
             AdminCommand adminCommand =
@@ -186,6 +188,13 @@ public final class LoginCore extends JavaPlugin {
         if (!validExistingAccountPolicy(policy)) {
             getLogger().severe("Invalid existing-account-policy value '" + policy + "'.");
             return false;
+        }
+        cookieEnabled = getConfig().getBoolean("cookie-enabled", true);
+        boolean configuredMigration = getConfig().getBoolean("migration-enabled", true);
+        // Q7: eviction without a cookie means an evicted cracked account can never be reclaimed.
+        migrationEnabled = configuredMigration && cookieEnabled;
+        if (configuredMigration && !cookieEnabled) {
+            getLogger().warning("migration-enabled requires cookie-enabled: premium-rename migration is disabled.");
         }
         for (String key : new String[]{"mojang.lookup-url", "mojang.lookup-fallback-url", "mojang.session-url"}) {
             String url = getConfig().getString(key);

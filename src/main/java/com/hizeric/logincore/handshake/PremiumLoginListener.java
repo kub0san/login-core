@@ -206,6 +206,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         attempt.link = link;
         attempt.linkedUuid = link.map(value -> parseUuid(value.mojangUuid(), attempt)).orElse(null);
         attempt.registeredBeforeLogin = context.registered();
+        attempt.storedClassification = context.storedClassification;
         attempt.expectedUuid = context.lookupResult.isPremium()
             ? context.lookupResult.mojangUuid()
             : attempt.linkedUuid;
@@ -303,7 +304,8 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             attempt.registeredBeforeLogin,
             attempt.linkedUuid,
             LoginDecisionEngine.ExistingAccountPolicy.valueOf(
-                getConfigBoolean("existing-account-policy", "REQUIRE_PASSWORD_ONCE").toUpperCase(Locale.ROOT))
+                getConfigBoolean("existing-account-policy", "REQUIRE_PASSWORD_ONCE").toUpperCase(Locale.ROOT)),
+            attempt.storedClassification
         );
         // Premium rename migration is owned by AuthMeLoginListener.commitIdentity; a genuine
         // cross-UUID conflict stays fail-closed here.
@@ -586,6 +588,7 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
         private volatile Optional<Storage.Link> link = Optional.empty();
         private volatile UUID linkedUuid;
         private volatile boolean registeredBeforeLogin;
+        private volatile String storedClassification;
         private volatile ScheduledFuture<?> timeout;
         private volatile ScheduledFuture<?> expiry;
 

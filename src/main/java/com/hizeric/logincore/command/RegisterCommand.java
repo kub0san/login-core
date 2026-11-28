@@ -106,6 +106,9 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
 
     /** Best-effort: a missing token or cookie failure must never fail registration. */
     private void storeAccountCookie(Player player) {
+        if (!plugin.getConfig().getBoolean("cookie-enabled", true)) {
+            return;
+        }
         try {
             storage.authmeToken(player.getName()).whenComplete((found, error) -> {
                 if (error != null) {

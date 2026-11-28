@@ -53,11 +53,8 @@ public final class LoginDecisionEngine {
         if (!input.validName()) {
             return Decision.PASS_THROUGH;
         }
-        // OFFLINE cannot become PREMIUM, even if a handshake somehow succeeded.
-        if ("OFFLINE".equals(input.storedClassification())
-            && input.lookupResult() != null && input.lookupResult().isPremium()) {
-            return Decision.DISCONNECT_NAME_RESERVED;
-        }
+        // An OFFLINE classification no longer blocks a premium name: a verified premium
+        // renaming into a squatted name must reach the handshake so migration can run.
         if (input.handshakeSuccess()) {
             return Decision.PASS_THROUGH;
         }
@@ -102,7 +99,7 @@ public final class LoginDecisionEngine {
 
     public static PostVerifyAction decidePostVerify(boolean handshakeSucceeded, UUID verifiedUuid,
                                                      boolean registered, UUID linkedUuid,
-                                                     ExistingAccountPolicy policy) {
+                                                     ExistingAccountPolicy policy, String storedClassification) {
         if (!handshakeSucceeded || verifiedUuid == null) {
             return PostVerifyAction.VERIFY_FAILED;
         }
@@ -110,6 +107,12 @@ public final class LoginDecisionEngine {
             return PostVerifyAction.ACCOUNT_CONFLICT;
         }
         if (!registered) {
+            return PostVerifyAction.REGISTER_AND_AUTO_LOGIN;
+        }
+        // A verified premium on an OFFLINE-classified, unlinked, registered name is a squatted
+        // rename: commitIdentity owns the migration, so do not demand the squatter's password.
+        // Genuine unlinked accounts stay on the password guard below.
+        if (linkedUuid == null && "OFFLINE".equals(storedClassification)) {
             return PostVerifyAction.REGISTER_AND_AUTO_LOGIN;
         }
         // A stored link is the commit marker: only an already-committed identity auto-logs in.

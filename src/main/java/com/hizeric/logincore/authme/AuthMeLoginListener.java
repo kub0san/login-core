@@ -55,6 +55,17 @@ public final class AuthMeLoginListener implements Listener {
     Function<String, Player> onlinePlayerLookup;
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
+    private boolean migrationEnabled = true;
+    private boolean cookieEnabled = true;
+
+    /** Production wiring: LoginCore supplies the effective (Q7-reconciled) config toggles. */
+    public AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage,
+                               VerifiedSessions verifiedSessions, Consumer<String> onVerifiedLogin,
+                               boolean migrationEnabled, boolean cookieEnabled) {
+        this(plugin, authState, storage, verifiedSessions, onVerifiedLogin);
+        this.migrationEnabled = migrationEnabled;
+        this.cookieEnabled = cookieEnabled;
+    }
 
     public AuthMeLoginListener(Plugin plugin, AuthState authState, Storage storage,
                                VerifiedSessions verifiedSessions, Consumer<String> onVerifiedLogin) {
@@ -209,7 +220,9 @@ public final class AuthMeLoginListener implements Listener {
                 event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("account-conflict"));
                 return;
             }
-            boolean needsRegistration = session.shouldRegister();
+            // A migrated rename already committed its authme row; registering here would kick
+            // the premium as "name already exists". All other auto-login paths keep the guard.
+            boolean needsRegistration = session.shouldRegister() && result != CommitResult.MIGRATED;
             if (needsRegistration) {
                 if (isRegistered.test(event.getName())) {
                     event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
@@ -257,6 +270,12 @@ public final class AuthMeLoginListener implements Listener {
                 Optional<Storage.Link> byUuid = storage.linkByUuid(mojangUuid).join();
                 if (byUuid.isPresent() && !byUuid.get().name().equalsIgnoreCase(session.name())) {
                     String oldName = byUuid.get().name();
+                    if (!migrationEnabled) {
+                        // Fail closed when eviction (and therefore reclaim) is off: no rename commit.
+                        plugin.getLogger().warning("Premium rename migration is disabled; refusing "
+                            + oldName + " -> " + session.name());
+                        return CommitResult.CONFLICT;
+                    }
                     String newToken = UUID.randomUUID().toString();
                     Storage.RenameMigrationResult migrated = storage.migratePremiumRename(
                         oldName, session.name(), mojangUuid, newToken).join();
@@ -268,7 +287,7 @@ public final class AuthMeLoginListener implements Listener {
                     // Free the squatted name only now that the migration committed.
                     evictOnlineSquatter(session.name());
                     plugin.getLogger().info("Migrated premium identity " + oldName + " -> " + session.name());
-                    return CommitResult.COMMITTED;
+                    return CommitResult.MIGRATED;
                 }
             }
             return storage.commitPremiumIdentity(session.name(), mojangUuid,
@@ -372,7 +391,7 @@ public final class AuthMeLoginListener implements Listener {
         } catch (RuntimeException ex) {
             result = CommitResult.CONFLICT;
         }
-        if (result != CommitResult.COMMITTED) {
+        if (result != CommitResult.COMMITTED && result != CommitResult.MIGRATED) {
             plugin.getLogger().severe("Premium identity for " + session.name()
                 + " could not be persisted after password login; refusing to release.");
             onMain.accept(() -> player.kick(message("account-conflict")));
@@ -388,6 +407,9 @@ public final class AuthMeLoginListener implements Listener {
 
     /** Best-effort: a missing token or cookie failure must never fail authentication. */
     private void storeAccountCookie(Player player) {
+        if (!cookieEnabled) {
+            return;
+        }
         try {
             storage.authmeToken(player.getName()).whenComplete((found, error) -> {
                 if (error != null) {
@@ -414,7 +436,7 @@ public final class AuthMeLoginListener implements Listener {
         }
     }
 
-    private enum CommitResult { COMMITTED, CONFLICT }
+    private enum CommitResult { COMMITTED, MIGRATED, CONFLICT }
 
     private static String registrationKey(String name, InetAddress address) {
         return name.toLowerCase(Locale.ROOT) + "@" + (address == null ? "" : address.getHostAddress());
