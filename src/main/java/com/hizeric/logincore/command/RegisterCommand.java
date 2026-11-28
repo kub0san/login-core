@@ -108,7 +108,11 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
     private void storeAccountCookie(Player player) {
         try {
             storage.authmeToken(player.getName()).whenComplete((found, error) -> {
-                if (error != null || found == null || found.isEmpty()) {
+                if (error != null) {
+                    plugin.getLogger().warning("Could not look up account token: " + error.getMessage());
+                    return;
+                }
+                if (found == null || found.isEmpty()) {
                     return;
                 }
                 String token = found.get();

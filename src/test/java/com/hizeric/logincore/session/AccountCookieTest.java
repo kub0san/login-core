@@ -20,6 +20,15 @@ class AccountCookieTest {
     }
 
     @Test
+    void encodeDecodeRoundTripMultibyte() {
+        String token = "tökén-🪙";
+        byte[] encoded = AccountCookie.encode(token);
+
+        assertArrayEquals(token.getBytes(StandardCharsets.UTF_8), encoded);
+        assertEquals(token, AccountCookie.decode(encoded));
+    }
+
+    @Test
     void decodeHandlesNullAndEmpty() {
         assertNull(AccountCookie.decode(null));
         assertNull(AccountCookie.decode(new byte[0]));
