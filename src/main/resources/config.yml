@@ -7,6 +7,11 @@ handshake-timeout-seconds: 10
 # Verified premium players use their Mojang UUID instead of their offline UUID.
 # Premium UUID mode can orphan existing UUID-based inventories and plugin data; those are not migrated.
 use-premium-uuid: true
+# Automatic premium-rename migration (premium priority): evicts a cracked squatter but
+# preserves their login-core account via a cookie token (see docs/issues/premium-offline-conflicts.md).
+migration-enabled: true
+# Client-stored account cookie used to recognize a returning cracked player after eviction.
+cookie-enabled: true
 debug: false
 mojang:
   lookup-url: "https://api.minecraftservices.com/minecraft/profile/lookup/name/%s"
@@ -21,5 +26,4 @@ messages:
   verify-failed: "<red>Couldn't verify your Minecraft session.\n<gray>Restart your launcher, make sure you're signed in, and try again."
   lookup-unavailable: "<red>Authentication services are temporarily unavailable.\n<gray>Please try again in a minute."
   account-conflict: "<red>This username is linked to a different Minecraft account.\n<gray>Please contact an administrator."
-  rename-conflict: "<red>Your Minecraft account is already linked under a different name.\n<gray>Ask an administrator to resolve the old link before using this name; it is never moved automatically."
   throttled: "<red>Too many connection attempts. Please wait a moment."

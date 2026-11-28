@@ -1,24 +1,36 @@
 # Issues & Proposals: Premium vs Offline Name Conflicts
 
+Status: Scenarios A and B are now handled by automatic premium-rename migration
+(see `docs/superpowers/specs/2026-11-28-premium-rename-migration-design.md`).
+
 ## Scenario A — Squatter offline account blocks premium owner
-An offline (cracked) player registers username `Notch` before the real premium owner joins.
-- Current behavior: premium owner's first join hits `REQUIRE_PASSWORD_ONCE` (policy), cannot auto-login without the squatter's password → dead end.
-- Proposal: add admin command to release/re-key the link + require premium owner verification (hasJoined) to override; keep squatter data under a renamed offline UUID? Or deny join with clear message + admin tooling.
+RESOLVED. On the premium owner's verified join, `AuthMeLoginListener.commitIdentity` detects the
+rename and `Storage.migratePremiumRename` evicts the squatter in one transaction: the squatter's
+`authme` row is moved to `evicted_accounts` (keyed by a stable `account_token`), the name is
+freed, and the premium identity is written. The squatter keeps their login-core account
+(password/regdate) and is recognized on return via the `logincore:acct` cookie, which restores
+the account under their new name. An online squatter is kicked best-effort.
 
 ## Scenario B — Rename on Mojang side
-Premium name moved to a new Mojang UUID. Stored link has old UUID.
-- Current: `ACCOUNT_CONFLICT` kick. Proposal: detect rename via stored-vs-fresh UUID comparison; admin command to re-link; or auto-update link if name+new UUID verified and old UUID no longer resolves.
+RESOLVED. Detected via stored-vs-fresh UUID comparison in `commitIdentity` (`linkByUuid`); the
+old link is released and the premium identity migrates automatically. No admin re-link needed.
 
 ## Scenario C — Offline account claims name after premium link exists
-Link exists for premium UUID; an offline client with same name joins.
-- Current: handshake required; offline cannot complete hasJoined → kick verify-failed. Good. Proposal: ensure message is `name-reserved` not generic verify-failed (F-05).
+Unchanged and correct: handshake required; offline client cannot complete hasJoined → kick.
+Message is `name-reserved` (F-05).
 
 ## Scenario D — Concurrent same-name connections
-Two clients same name simultaneously.
-- Proposal: per-name lock; second waits or is rejected; verified session one-shot already handles.
+Unchanged: per-name lock not implemented; verified session one-shot already handles it.
+
+## Deferred (tracked as GitHub issues)
+- Stable entity UUID for cracked players (full inventory/stat/other-plugin data across rename):
+  requires a proxy or NMS — out of scope for this backend plugin. See issue #2.
+- Vanilla dialog display on stock Paper 1.21.11: `Player.showDialog` is not in the pinned
+  paper-api, so dialogs degrade to the existing `/login` / `/register` command flow. A future
+  task can add NMS-based display.
 
 ## Security hardening ideas
-- Fail closed on any UUID mismatch.
+- Fail closed on any UUID mismatch (unchanged).
 - Rate-limit premium-name joins per IP.
 - Audit log for conflict kicks.
 - Never allow password fallback for stored PREMIUM classification.
