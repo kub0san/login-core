@@ -60,6 +60,7 @@ public final class PreAuthRestrictionListener implements Listener {
     private final JavaPlugin plugin;
     private final AuthState authState;
     private final Storage storage;
+    private final AccountCookie accountCookie;
     private final Executor workers;
     private final Supplier<Boolean> premiumAvailable;
     private final ConcurrentMap<String, Long> joinedAt = new ConcurrentHashMap<>();
@@ -72,6 +73,7 @@ public final class PreAuthRestrictionListener implements Listener {
         this.plugin = plugin;
         this.authState = authState;
         this.storage = storage;
+        this.accountCookie = new AccountCookie(plugin);
         this.workers = workers;
         this.premiumAvailable = premiumAvailable;
     }
@@ -108,6 +110,76 @@ public final class PreAuthRestrictionListener implements Listener {
         } catch (RuntimeException ex) {
             // Storage unavailable during shutdown: the player stays restricted.
         }
+        scheduleRestorePrompt(player, name);
+    }
+
+    /** Post-join best-effort account restore and login/register prompt; no storage work on the join thread. */
+    private void scheduleRestorePrompt(Player player, String name) {
+        try {
+            Runnable task = () -> restoreAndPrompt(player, name);
+            if (plugin.isEnabled()) {
+                Bukkit.getScheduler().runTaskLater(plugin, task, 1L);
+            } else {
+                task.run();
+            }
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not schedule account restore for " + name + ": " + ex.getMessage());
+        }
+    }
+
+    private void restoreAndPrompt(Player player, String name) {
+        if (!player.isOnline() || !joinedAt.containsKey(name) || authState.isAuthenticated(name)) {
+            return;
+        }
+        try {
+            accountCookie.read(player).whenCompleteAsync((token, error) -> {
+                if (!player.isOnline() || !joinedAt.containsKey(name) || authState.isAuthenticated(name)) {
+                    return;
+                }
+                if (error != null) {
+                    plugin.getLogger().warning("Could not read account cookie for " + name + ": " + error.getMessage());
+                    return;
+                }
+                try {
+                    String archivedToken = token == null || token.isBlank() ? null : token;
+                    if (archivedToken != null && storage.findEvicted(archivedToken).join().isPresent()) {
+                        Storage.RestoreResult result = storage.restoreEvicted(archivedToken, player.getName()).join();
+                        if (result == Storage.RestoreResult.RESTORED) {
+                            plugin.getLogger().info("restored evicted account for " + player.getName());
+                        } else if (result == Storage.RestoreResult.COLLISION) {
+                            // Another account owns the name: keep the evicted row untouched.
+                            plugin.getLogger().warning("Account restore for " + player.getName()
+                                + " collided; the archived account was kept.");
+                        }
+                    }
+                    boolean registered = Boolean.TRUE.equals(storage.isRegistered(player.getName()).join());
+                    showPrompt(player, name, registered);
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("Could not restore account for " + name + ": " + ex.getMessage());
+                }
+            }, workers);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not read account cookie for " + name + ": " + ex.getMessage());
+        }
+    }
+
+    private void showPrompt(Player player, String name, boolean registered) {
+        if (!AccountDialogs.isSupported()) {
+            return;
+        }
+        onMain(() -> {
+            try {
+                if (!player.isOnline() || !joinedAt.containsKey(name) || authState.isAuthenticated(name)) {
+                    return;
+                }
+                var dialog = registered
+                    ? AccountDialogs.buildLoginDialog(plugin)
+                    : AccountDialogs.buildRegisterDialog(plugin);
+                AccountDialogs.show(player, dialog);
+            } catch (RuntimeException ex) {
+                plugin.getLogger().warning("Could not show account dialog for " + name + ": " + ex.getMessage());
+            }
+        });
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
