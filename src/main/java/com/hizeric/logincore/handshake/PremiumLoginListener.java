@@ -305,6 +305,8 @@ public final class PremiumLoginListener extends PacketListenerAbstract implement
             LoginDecisionEngine.ExistingAccountPolicy.valueOf(
                 getConfigBoolean("existing-account-policy", "REQUIRE_PASSWORD_ONCE").toUpperCase(Locale.ROOT))
         );
+        // Premium rename migration is owned by AuthMeLoginListener.commitIdentity; a genuine
+        // cross-UUID conflict stays fail-closed here.
         if (action == LoginDecisionEngine.PostVerifyAction.ACCOUNT_CONFLICT) {
             disconnect(attempt, "account-conflict");
             return;

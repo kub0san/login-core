@@ -21,6 +21,7 @@ import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.Locale;
@@ -32,6 +33,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 public final class AuthMeLoginListener implements Listener {
@@ -49,6 +51,8 @@ public final class AuthMeLoginListener implements Listener {
     private final Consumer<Runnable> onMain;
     // Registration is committed at pre-login; only an event marker survives to PlayerLoginEvent.
     private final Set<String> pendingRegistrations = ConcurrentHashMap.newKeySet();
+    /** Seam for tests: resolves an online squatter; production uses Bukkit#getPlayerExact. */
+    Function<String, Player> onlinePlayerLookup;
     private final SecureRandom secureRandom = new SecureRandom();
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
 
@@ -94,6 +98,19 @@ public final class AuthMeLoginListener implements Listener {
         this.register = register;
         this.isBanned = isBanned;
         this.onMain = onMain;
+        this.onlinePlayerLookup = bukkitOnlinePlayerLookup(plugin);
+    }
+
+    private static Function<String, Player> bukkitOnlinePlayerLookup(Plugin plugin) {
+        return name -> {
+            try {
+                return Bukkit.getPlayerExact(name);
+            } catch (RuntimeException ex) {
+                plugin.getLogger().fine("Could not look up an online squatter for " + name
+                    + ": " + ex.getMessage());
+                return null;
+            }
+        };
     }
 
     private static BiPredicate<String, InetAddress> bukkitBanCheck(Plugin plugin) {
@@ -186,10 +203,6 @@ public final class AuthMeLoginListener implements Listener {
         try {
             // Single transactional commit, on the async pre-login thread: never on the main thread.
             CommitResult result = commitIdentity(session);
-            if (result == CommitResult.RENAME_CONFLICT) {
-                event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, message("rename-conflict"));
-                return;
-            }
             if (result == CommitResult.CONFLICT) {
                 plugin.getLogger().severe("Premium identity for " + session.name()
                     + " could not be persisted; refusing to grant access.");
@@ -243,18 +256,60 @@ public final class AuthMeLoginListener implements Listener {
             if (session.link().isEmpty()) {
                 Optional<Storage.Link> byUuid = storage.linkByUuid(mojangUuid).join();
                 if (byUuid.isPresent() && !byUuid.get().name().equalsIgnoreCase(session.name())) {
-                    plugin.getLogger().warning("Premium UUID " + mojangUuid + " is already linked to "
-                        + byUuid.get().name() + "; refusing rename to " + session.name()
-                        + " (the old link is left untouched)");
-                    return CommitResult.RENAME_CONFLICT;
+                    String oldName = byUuid.get().name();
+                    // Free the new name before the migration writes the premium identity to it.
+                    evictOnlineSquatter(session.name());
+                    String newToken = UUID.randomUUID().toString();
+                    Storage.RenameMigrationResult migrated = storage.migratePremiumRename(
+                        oldName, session.name(), mojangUuid, newToken).join();
+                    if (migrated != Storage.RenameMigrationResult.COMMITTED) {
+                        plugin.getLogger().severe("Premium rename " + oldName + " -> " + session.name()
+                            + " could not be persisted; refusing to grant access.");
+                        return CommitResult.CONFLICT;
+                    }
+                    plugin.getLogger().info("Migrated premium identity " + oldName + " -> " + session.name());
+                    return CommitResult.COMMITTED;
                 }
             }
-            // TODO: store cookie (Phase 4) — premium auto-login commits before a Player exists.
             return storage.commitPremiumIdentity(session.name(), mojangUuid,
                 session.mojangSession().canonicalName(), session.linkSource()).join()
                 ? CommitResult.COMMITTED : CommitResult.CONFLICT;
         } catch (CompletionException | RejectedExecutionException ex) {
             return CommitResult.CONFLICT;
+        }
+    }
+
+    /**
+     * Best-effort: kick a cracked player still holding the premium's new name and cancel their
+     * in-flight auth. A failure to look up or kick them must not block the rename migration.
+     */
+    private void evictOnlineSquatter(String name) {
+        Player squatter;
+        try {
+            squatter = onlinePlayerLookup.apply(name);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not look up an online squatter for " + name
+                + ": " + ex.getMessage());
+            return;
+        }
+        if (squatter == null) {
+            return;
+        }
+        try {
+            InetSocketAddress address = squatter.getAddress();
+            pendingRegistrations.remove(registrationKey(name, address == null ? null : address.getAddress()));
+            verifiedSessions.consume(name, address);
+            onMain.accept(() -> {
+                try {
+                    squatter.kick(message("account-conflict"));
+                } catch (RuntimeException ex) {
+                    plugin.getLogger().warning("Could not kick online squatter " + name + ": " + ex.getMessage());
+                }
+            });
+            plugin.getLogger().info("Evicted online squatter holding the name " + name);
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not cancel in-flight auth for online squatter " + name
+                + ": " + ex.getMessage());
         }
     }
 
@@ -284,6 +339,9 @@ public final class AuthMeLoginListener implements Listener {
         }
         // Pre-authenticated premium auto-login: no registration, and the password hook is not used.
         if (authState.isAuthenticated(name)) {
+            // Phase 3 pattern: read the committed token (the migration's new token on a rename)
+            // and store the cookie on main, best-effort.
+            storeAccountCookie(player);
             plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
         }
     }
@@ -356,7 +414,7 @@ public final class AuthMeLoginListener implements Listener {
         }
     }
 
-    private enum CommitResult { COMMITTED, CONFLICT, RENAME_CONFLICT }
+    private enum CommitResult { COMMITTED, CONFLICT }
 
     private static String registrationKey(String name, InetAddress address) {
         return name.toLowerCase(Locale.ROOT) + "@" + (address == null ? "" : address.getHostAddress());

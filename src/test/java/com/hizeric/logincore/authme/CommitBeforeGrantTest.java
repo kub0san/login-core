@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -111,8 +112,10 @@ class CommitBeforeGrantTest {
 
     @Test
     void failedLinkWriteRollsBackClassificationAndDoesNotGrant() throws Exception {
+        String otherUuid = "00000000-0000-0000-0000-000000000002";
         try (Storage storage = new Storage(temporaryDirectory.resolve("rollback.db"))) {
-            storage.putLink("Other", UUID_TEXT, "Other", "AUTO").get();
+            // Same name, different UUID: a genuine conflict, not a premium rename.
+            storage.putLink("Notch", otherUuid, "Notch", "AUTO").get();
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(session());
             List<String> grants = new ArrayList<>();
@@ -151,8 +154,8 @@ class CommitBeforeGrantTest {
     }
 
     @Test
-    void renamedPremiumGetsRenameConflictNotGeneric() throws Exception {
-        try (Storage storage = new Storage(temporaryDirectory.resolve("rename-conflict.db"))) {
+    void renamedPremiumMigratesAndGrants() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("rename-migration.db"))) {
             storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
             VerifiedSessions sessions = new VerifiedSessions();
             sessions.put(session("new"));
@@ -162,13 +165,70 @@ class CommitBeforeGrantTest {
 
             listener.onAsyncPreLogin(event);
 
-            assertTrue(grants.isEmpty(), "a rename conflict must not grant access");
-            assertEquals(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, event.getLoginResult());
-            assertTrue(event.getKickMessage().contains("rename-conflict"), event.getKickMessage());
-            assertEquals("old", storage.link("old").get().orElseThrow().name(),
-                "the existing link must not be adopted or rewritten");
-            assertEquals(UUID_TEXT, storage.link("old").get().orElseThrow().mojangUuid());
-            assertEquals(1, storage.summary().get().links(), "no new link may be written");
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertEquals(List.of("new"), grants, "a migrated rename follows the normal grant path");
+            assertTrue(storage.link("old").get().isEmpty(), "the old link must be released");
+            assertEquals(UUID_TEXT, storage.link("new").get().orElseThrow().mojangUuid());
+            assertEquals("new", storage.link("new").get().orElseThrow().name());
+            assertEquals(1, storage.summary().get().links(), "exactly one link survives the migration");
+            assertTrue(storage.authmeToken("new").get().orElseThrow().length() == 36,
+                "the migration must write the stable account token for the cookie");
+        }
+    }
+
+    @Test
+    void onlineSquatterIsKickedAndInflightAuthCancelledOnRename() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("online-squatter.db"))) {
+            storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
+            InetSocketAddress squatterAddress = new InetSocketAddress("10.0.0.2", 25565);
+            VerifiedSession squatterSession = new VerifiedSession(
+                "squatter-connection", "new", "10.0.0.2",
+                MojangClient.SessionResult.verified(UUID.randomUUID(), "new"),
+                Optional.empty(), false, false, false, true, "AUTO");
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(squatterSession);
+            sessions.put(session("new"));
+            List<String> kicks = new ArrayList<>();
+            Player squatter = player("new", squatterAddress, kicks);
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, grants);
+            listener.onlinePlayerLookup = name -> name.equalsIgnoreCase("new") ? squatter : null;
+            Set<String> pending = pendingRegistrations(listener);
+            pending.add("new@10.0.0.2");
+            AsyncPlayerPreLoginEvent event = event("new");
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertEquals(List.of("new"), grants);
+            assertEquals(1, kicks.size(), kicks.toString());
+            assertTrue(kicks.get(0).contains("account-conflict"), kicks.toString());
+            assertTrue(pending.isEmpty(), "the squatter's pending registration must be cancelled");
+            assertTrue(sessions.find("new", squatterAddress).isEmpty(),
+                "the squatter's in-flight verified session must be dropped");
+            assertTrue(storage.link("old").get().isEmpty());
+            assertEquals(UUID_TEXT, storage.link("new").get().orElseThrow().mojangUuid());
+        }
+    }
+
+    @Test
+    void squatterLookupFailureDoesNotBlockRename() throws Exception {
+        try (Storage storage = new Storage(temporaryDirectory.resolve("squatter-lookup-fail.db"))) {
+            storage.putLink("Old", UUID_TEXT, "Old", "AUTO").get();
+            VerifiedSessions sessions = new VerifiedSessions();
+            sessions.put(session("new"));
+            List<String> grants = new ArrayList<>();
+            AuthMeLoginListener listener = listener(storage, sessions, grants);
+            listener.onlinePlayerLookup = name -> {
+                throw new IllegalStateException("no live server");
+            };
+            AsyncPlayerPreLoginEvent event = event("new");
+
+            listener.onAsyncPreLogin(event);
+
+            assertEquals(AsyncPlayerPreLoginEvent.Result.ALLOWED, event.getLoginResult());
+            assertEquals(List.of("new"), grants);
+            assertEquals(UUID_TEXT, storage.link("new").get().orElseThrow().mojangUuid());
         }
     }
 
@@ -759,10 +819,14 @@ class CommitBeforeGrantTest {
     }
 
     private static Player player(List<String> kicks) {
+        return player("Notch", new InetSocketAddress("127.0.0.1", 25565), kicks);
+    }
+
+    private static Player player(String name, InetSocketAddress address, List<String> kicks) {
         return (Player) Proxy.newProxyInstance(Player.class.getClassLoader(), new Class<?>[]{Player.class},
             (proxy, method, args) -> switch (method.getName()) {
-                case "getName" -> "Notch";
-                case "getAddress" -> new InetSocketAddress("127.0.0.1", 25565);
+                case "getName" -> name;
+                case "getAddress" -> address;
                 case "kick" -> {
                     kicks.add("kick:" + MiniMessage.miniMessage().serialize((Component) args[0]));
                     yield null;
@@ -773,6 +837,13 @@ class CommitBeforeGrantTest {
                 }
                 default -> null;
             });
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Set<String> pendingRegistrations(AuthMeLoginListener listener) throws Exception {
+        Field field = AuthMeLoginListener.class.getDeclaredField("pendingRegistrations");
+        field.setAccessible(true);
+        return (Set<String>) field.get(listener);
     }
 
     private static VerifiedSession session() {
