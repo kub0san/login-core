@@ -896,7 +896,6 @@ class CommitBeforeGrantTest {
     private static Plugin plugin() {
         TestPlugin plugin = TestPlugin.create();
         plugin.getConfig().set("messages.account-conflict", "<red>account-conflict</red>");
-        plugin.getConfig().set("messages.rename-conflict", "<red>rename-conflict</red>");
         return plugin;
     }
 

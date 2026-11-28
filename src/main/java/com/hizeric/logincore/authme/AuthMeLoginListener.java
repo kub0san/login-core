@@ -257,8 +257,6 @@ public final class AuthMeLoginListener implements Listener {
                 Optional<Storage.Link> byUuid = storage.linkByUuid(mojangUuid).join();
                 if (byUuid.isPresent() && !byUuid.get().name().equalsIgnoreCase(session.name())) {
                     String oldName = byUuid.get().name();
-                    // Free the new name before the migration writes the premium identity to it.
-                    evictOnlineSquatter(session.name());
                     String newToken = UUID.randomUUID().toString();
                     Storage.RenameMigrationResult migrated = storage.migratePremiumRename(
                         oldName, session.name(), mojangUuid, newToken).join();
@@ -267,6 +265,8 @@ public final class AuthMeLoginListener implements Listener {
                             + " could not be persisted; refusing to grant access.");
                         return CommitResult.CONFLICT;
                     }
+                    // Free the squatted name only now that the migration committed.
+                    evictOnlineSquatter(session.name());
                     plugin.getLogger().info("Migrated premium identity " + oldName + " -> " + session.name());
                     return CommitResult.COMMITTED;
                 }
