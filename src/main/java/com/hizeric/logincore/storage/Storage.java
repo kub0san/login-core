@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
@@ -25,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 public final class Storage implements AutoCloseable {
 
-    private static final int CURRENT_SCHEMA_VERSION = 2;
+    private static final int CURRENT_SCHEMA_VERSION = 3;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "login-core-SQLite");
@@ -168,6 +169,45 @@ public final class Storage implements AutoCloseable {
                                 SELECT RAISE(ABORT, 'classification is immutable');
                             END
                             """);
+                        // v3: stable account token on authme + archive for evicted cracked accounts.
+                        boolean hasAccountToken = false;
+                        try (ResultSet result = statement.executeQuery("PRAGMA table_info(authme)")) {
+                            while (result.next()) {
+                                if ("account_token".equals(result.getString("name"))) {
+                                    hasAccountToken = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!hasAccountToken) {
+                            statement.executeUpdate("ALTER TABLE authme ADD COLUMN account_token VARCHAR(36)");
+                        }
+                        List<Long> missingTokens = new ArrayList<>();
+                        try (ResultSet result = statement.executeQuery(
+                            "SELECT id FROM authme WHERE account_token IS NULL")) {
+                            while (result.next()) {
+                                missingTokens.add(result.getLong(1));
+                            }
+                        }
+                        try (PreparedStatement update = connection.prepareStatement(
+                            "UPDATE authme SET account_token = ? WHERE id = ?")) {
+                            for (long id : missingTokens) {
+                                update.setString(1, UUID.randomUUID().toString());
+                                update.setLong(2, id);
+                                update.executeUpdate();
+                            }
+                        }
+                        statement.executeUpdate("""
+                            CREATE TABLE IF NOT EXISTS evicted_accounts (
+                                token TEXT PRIMARY KEY,
+                                old_username TEXT NOT NULL,
+                                password TEXT NOT NULL,
+                                regdate INTEGER NOT NULL,
+                                realname TEXT,
+                                evicted_at INTEGER NOT NULL,
+                                reason TEXT
+                            )
+                            """);
                         // Exemptions are never re-imported: classification is the only identity signal.
                         statement.executeUpdate("DROP TABLE IF EXISTS exempt");
                         // Stamped last, inside the same transaction, so a partial migration is never marked done.
@@ -296,8 +336,8 @@ public final class Storage implements AutoCloseable {
                 }
             }
             try (PreparedStatement insert = connection.prepareStatement("""
-                INSERT INTO authme (username, password, regdate, regip, realname, playerUUID, isLogged, hasSession)
-                VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                INSERT INTO authme (username, password, regdate, regip, realname, playerUUID, account_token, isLogged, hasSession)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
                 """)) {
                 insert.setString(1, normalized);
                 insert.setString(2, hashed);
@@ -305,6 +345,7 @@ public final class Storage implements AutoCloseable {
                 insert.setString(4, "127.0.0.1");
                 insert.setString(5, name);
                 insert.setString(6, offlineUuid(name));
+                insert.setString(7, UUID.randomUUID().toString());
                 insert.executeUpdate();
                 return true;
             }
@@ -468,6 +509,181 @@ public final class Storage implements AutoCloseable {
                 connection.setAutoCommit(autoCommit);
             }
         });
+    }
+
+    /**
+     * Moves a premium identity to a new name in one transaction: releases the old name,
+     * archives any cracked squatter holding the new name, then writes the premium link,
+     * classification and authme row. Conflicts roll the whole migration back.
+     */
+    public CompletableFuture<RenameMigrationResult> migratePremiumRename(String oldName, String newName,
+                                                                          String mojangUuid, String newToken) {
+        String oldKey = classificationKey(oldName);
+        String newKey = classificationKey(newName);
+        String canonical = newName.trim();
+        return submit(() -> {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                // Release the old name. Classification uses DELETE because it is immutable.
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM links WHERE name_lower = ?")) {
+                    statement.setString(1, oldKey);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM account_classification WHERE name_lower = ?")) {
+                    statement.setString(1, oldKey);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM authme WHERE username = ? COLLATE NOCASE")) {
+                    statement.setString(1, oldKey);
+                    statement.executeUpdate();
+                }
+
+                // Evict a squatter, preserving its account data for a later restore.
+                long now = Instant.now().toEpochMilli();
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO evicted_accounts
+                        (token, old_username, password, regdate, realname, evicted_at, reason)
+                    SELECT account_token, username, password, regdate, realname, ?, 'premium-rename'
+                    FROM authme WHERE username = ? COLLATE NOCASE
+                    """)) {
+                    statement.setLong(1, now);
+                    statement.setString(2, newKey);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM authme WHERE username = ? COLLATE NOCASE")) {
+                    statement.setString(1, newKey);
+                    statement.executeUpdate();
+                }
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM account_classification WHERE name_lower = ?")) {
+                    statement.setString(1, newKey);
+                    statement.executeUpdate();
+                }
+
+                // Write the premium identity. The old link is already gone, so the UUID is free.
+                if (insertClassification(newKey, "PREMIUM") == 0
+                    && !"PREMIUM".equals(storedClassification(newKey))) {
+                    connection.rollback();
+                    return RenameMigrationResult.CONFLICT;
+                }
+                if (!writeLink(newKey, mojangUuid, canonical, "AUTO")) {
+                    connection.rollback();
+                    return RenameMigrationResult.CONFLICT;
+                }
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO authme
+                        (username, password, regdate, realname, playerUUID, account_token, isLogged, hasSession)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                    """)) {
+                    statement.setString(1, newKey);
+                    // Premium has no local password; a random UUID is not a supported hash, so it cannot authenticate.
+                    statement.setString(2, UUID.randomUUID().toString());
+                    statement.setLong(3, now);
+                    statement.setString(4, canonical);
+                    statement.setString(5, mojangUuid);
+                    statement.setString(6, newToken);
+                    statement.executeUpdate();
+                }
+                connection.commit();
+                return RenameMigrationResult.COMMITTED;
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw ex;
+            } catch (RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+        });
+    }
+
+    /** Reads an archived cracked account by its stable token. */
+    public CompletableFuture<Optional<EvictedAccount>> findEvicted(String token) {
+        return submit(() -> findEvictedRow(token));
+    }
+
+    private Optional<EvictedAccount> findEvictedRow(String token) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            SELECT token, old_username, password, regdate, realname FROM evicted_accounts WHERE token = ?
+            """)) {
+            statement.setString(1, token);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new EvictedAccount(result.getString("token"), result.getString("old_username"),
+                    result.getString("password"), result.getLong("regdate"), result.getString("realname")));
+            }
+        }
+    }
+
+    /**
+     * Restores an archived cracked account into a new name. Fails closed without touching the
+     * archive when the name is already PREMIUM or already registered.
+     */
+    public CompletableFuture<RestoreResult> restoreEvicted(String token, String newName) {
+        String normalized = classificationKey(newName);
+        return submit(() -> {
+            boolean autoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                Optional<EvictedAccount> archived = findEvictedRow(token);
+                if (archived.isEmpty()) {
+                    connection.rollback();
+                    return RestoreResult.NOT_FOUND;
+                }
+                if ("PREMIUM".equals(storedClassification(normalized)) || hasAuthme(normalized)) {
+                    connection.rollback();
+                    return RestoreResult.COLLISION;
+                }
+                EvictedAccount row = archived.orElseThrow();
+                try (PreparedStatement statement = connection.prepareStatement("""
+                    INSERT INTO authme
+                        (username, password, regdate, realname, playerUUID, account_token, isLogged, hasSession)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+                    """)) {
+                    statement.setString(1, normalized);
+                    statement.setString(2, row.password());
+                    statement.setLong(3, row.regdate());
+                    statement.setString(4, row.realname() == null ? newName.trim() : row.realname());
+                    statement.setString(5, offlineUuid(newName));
+                    statement.setString(6, row.token());
+                    statement.executeUpdate();
+                }
+                insertClassification(normalized, "OFFLINE");
+                try (PreparedStatement statement = connection.prepareStatement(
+                    "DELETE FROM evicted_accounts WHERE token = ?")) {
+                    statement.setString(1, row.token());
+                    statement.executeUpdate();
+                }
+                connection.commit();
+                return RestoreResult.RESTORED;
+            } catch (SQLException ex) {
+                connection.rollback();
+                throw ex;
+            } catch (RuntimeException ex) {
+                connection.rollback();
+                throw ex;
+            } finally {
+                connection.setAutoCommit(autoCommit);
+            }
+        });
+    }
+
+    private boolean hasAuthme(String normalizedName) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT 1 FROM authme WHERE username = ? COLLATE NOCASE")) {
+            statement.setString(1, normalizedName);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next();
+            }
+        }
     }
 
     // Internal-only (login pipeline); never wire this to a command — classification is immutable.
@@ -640,4 +856,13 @@ public final class Storage implements AutoCloseable {
     }
 
     public enum ClassificationResult { SET, ALREADY_SAME, ALREADY_DIFFERENT }
+
+    public enum RenameMigrationResult { COMMITTED, CONFLICT }
+
+    public enum RestoreResult { RESTORED, COLLISION, NOT_FOUND }
+
+    /** Archived cracked account data, keyed by the stable account token. */
+    public record EvictedAccount(String token, String oldUsername, String password,
+                                 long regdate, String realname) {
+    }
 }

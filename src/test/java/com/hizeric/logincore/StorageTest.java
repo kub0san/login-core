@@ -191,7 +191,7 @@ class StorageTest {
     void newerSchemaVersionIsRejected() throws Exception {
         Path database = temporaryDirectory.resolve("newer-schema.db");
         try (Connection connection = open(database); Statement statement = connection.createStatement()) {
-            statement.execute("PRAGMA user_version = 3");
+            statement.execute("PRAGMA user_version = 4");
         }
 
         SQLException failure = assertThrows(SQLException.class, () -> new Storage(database));
@@ -199,7 +199,7 @@ class StorageTest {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
             messages.append(cause.getMessage()).append('\n');
         }
-        assertTrue(messages.toString().contains("user_version 3"));
+        assertTrue(messages.toString().contains("user_version 4"));
         assertTrue(messages.toString().contains("newer login-core"));
     }
 
@@ -211,7 +211,7 @@ class StorageTest {
         try (Storage storage = new Storage(database)) {
             assertEquals("PREMIUM", storage.classification("notch").get().orElseThrow());
             assertFalse(hasColumn(database, "links", "classification"));
-            assertEquals(2, userVersion(database));
+            assertEquals(3, userVersion(database));
             assertEquals(1, backups(database).size(), "startup takes exactly one backup before the migration DDL");
         }
     }
@@ -223,7 +223,7 @@ class StorageTest {
             assertEquals(0, storage.summary().get().links());
         }
         assertTrue(backups(database).isEmpty(), "no pre-existing file means nothing to back up");
-        assertEquals(2, userVersion(database));
+        assertEquals(3, userVersion(database));
     }
 
     @Test
@@ -241,7 +241,7 @@ class StorageTest {
             assertEquals("PREMIUM", second.classification("notch").get().orElseThrow());
         }
         assertEquals(afterFirst, backups(database), "a second startup must not take another backup");
-        assertEquals(2, userVersion(database));
+        assertEquals(3, userVersion(database));
     }
 
     @Test
@@ -372,6 +372,209 @@ class StorageTest {
             assertEquals("notch", found.name());
             assertEquals(UUID, found.mojangUuid());
             assertEquals(1, storage.summary().get().links());
+        }
+    }
+
+    @Test
+    void renameReleasesOldNameEvictsSquatterAndWritesPremium() throws Exception {
+        Path database = temporaryDirectory.resolve("premium-rename.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            storage.putLink("OldName", UUID, "OldName", "AUTO").get();
+            storage.setClassification("OldName", "PREMIUM").get();
+            insertAuthme(connection, "OldName", "premium-hash", 11L, "OldName", "old-token");
+            insertAuthme(connection, "NewName", "squatter-hash", 77L, "NewName", "squatter-token");
+            storage.setClassification("NewName", "OFFLINE").get();
+
+            assertEquals(Storage.RenameMigrationResult.COMMITTED,
+                storage.migratePremiumRename("OldName", "NewName", UUID, "new-token").get());
+
+            assertTrue(storage.link("OldName").get().isEmpty(), "the old premium link must be released");
+            assertTrue(storage.classification("OldName").get().isEmpty(), "the old name must be declassified");
+            assertFalse(storage.isRegistered("OldName").get(), "the old authme row must be gone");
+            assertEquals(UUID, storage.link("NewName").get().orElseThrow().mojangUuid());
+            assertEquals("PREMIUM", storage.classification("NewName").get().orElseThrow());
+            assertTrue(storage.isRegistered("NewName").get());
+            assertEquals("new-token", authmeString(connection, "newname", "account_token"));
+            assertEquals(UUID, authmeString(connection, "newname", "playerUUID"));
+            assertNotEquals(77L, authmeRegdate(connection, "newname"), "the premium row is new, not the squat");
+
+            Storage.EvictedAccount evicted = storage.findEvicted("squatter-token").get().orElseThrow();
+            assertEquals("squatter-token", evicted.token());
+            assertEquals("newname", evicted.oldUsername());
+            assertEquals("squatter-hash", evicted.password());
+            assertEquals(77L, evicted.regdate());
+            assertEquals("NewName", evicted.realname());
+        }
+    }
+
+    @Test
+    void renameRollsBackEverythingOnUuidConflict() throws Exception {
+        Path database = temporaryDirectory.resolve("rename-rollback.db");
+        try (Storage storage = new Storage(database);
+             Connection connection = open(database);
+             Statement statement = connection.createStatement()) {
+            storage.putLink("OldName", UUID, "OldName", "AUTO").get();
+            storage.setClassification("OldName", "PREMIUM").get();
+            insertAuthme(connection, "OldName", "premium-hash", 11L, "OldName", "old-token");
+            insertAuthme(connection, "NewName", "squatter-hash", 77L, "NewName", "squatter-token");
+            storage.setClassification("NewName", "OFFLINE").get();
+            // The token is already archived elsewhere, so the eviction INSERT hits the PK.
+            statement.executeUpdate("INSERT INTO evicted_accounts "
+                + "(token, old_username, password, regdate, realname, evicted_at, reason) "
+                + "VALUES ('squatter-token', 'Elsewhere', 'x', 1, 'Elsewhere', 0, 'premium-rename')");
+
+            assertThrows(Exception.class,
+                () -> storage.migratePremiumRename("OldName", "NewName", UUID, "new-token").get());
+
+            assertEquals(UUID, storage.link("OldName").get().orElseThrow().mojangUuid());
+            assertEquals("PREMIUM", storage.classification("OldName").get().orElseThrow());
+            assertTrue(storage.isRegistered("OldName").get());
+            assertEquals("squatter-hash", authmeString(connection, "newname", "password"));
+            assertEquals("squatter-token", authmeString(connection, "newname", "account_token"));
+            assertEquals("OFFLINE", storage.classification("NewName").get().orElseThrow());
+            assertTrue(storage.link("NewName").get().isEmpty());
+            assertEquals(1, countEvicted(connection),
+                "the forced failure must not add to the archive");
+        }
+    }
+
+    @Test
+    void restoreEvictedBringsBackPasswordAndRegdate() throws Exception {
+        Path database = temporaryDirectory.resolve("restore.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            insertAuthme(connection, "NewName", "squatter-hash", 77L, "NewName", "squatter-token");
+            storage.setClassification("NewName", "OFFLINE").get();
+            assertEquals(Storage.RenameMigrationResult.COMMITTED,
+                storage.migratePremiumRename("OldName", "NewName", UUID, "new-token").get());
+
+            assertEquals(Storage.RestoreResult.RESTORED,
+                storage.restoreEvicted("squatter-token", "Returning").get());
+
+            assertEquals("squatter-hash", authmeString(connection, "returning", "password"));
+            assertEquals(77L, authmeRegdate(connection, "returning"));
+            assertEquals("squatter-token", authmeString(connection, "returning", "account_token"));
+            assertEquals(offlineUuid("Returning"), authmeString(connection, "returning", "playerUUID"));
+            assertEquals("OFFLINE", storage.classification("Returning").get().orElseThrow());
+            assertTrue(storage.findEvicted("squatter-token").get().isEmpty(), "the archive row must be consumed");
+        }
+    }
+
+    @Test
+    void restoreEvictedFailsClosedOnCollisionAndUnknownToken() throws Exception {
+        Path database = temporaryDirectory.resolve("restore-collision.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            insertAuthme(connection, "NewName", "squatter-hash", 77L, "NewName", "squatter-token");
+            insertAuthme(connection, "Taken", "taken-hash", 12L, "Taken", "taken-token");
+            storage.setClassification("NewName", "OFFLINE").get();
+            storage.setClassification("PremiumName", "PREMIUM").get();
+            assertEquals(Storage.RenameMigrationResult.COMMITTED,
+                storage.migratePremiumRename("OldName", "NewName", UUID, "new-token").get());
+
+            assertEquals(Storage.RestoreResult.COLLISION,
+                storage.restoreEvicted("squatter-token", "Taken").get());
+            assertEquals(Storage.RestoreResult.COLLISION,
+                storage.restoreEvicted("squatter-token", "PremiumName").get());
+            assertTrue(storage.findEvicted("squatter-token").get().isPresent(),
+                "a collision must keep the archived account intact");
+            assertEquals("taken-hash", authmeString(connection, "taken", "password"));
+
+            assertEquals(Storage.RestoreResult.NOT_FOUND,
+                storage.restoreEvicted("unknown-token", "FreshName").get());
+            assertFalse(storage.isRegistered("FreshName").get());
+        }
+    }
+
+    @Test
+    void registerPlayerAssignsAnAccountToken() throws Exception {
+        Path database = temporaryDirectory.resolve("register-token.db");
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertTrue(storage.registerPlayer("Fresh", "hunter2").get());
+            String token = authmeString(connection, "fresh", "account_token");
+            assertEquals(token, java.util.UUID.fromString(token).toString(),
+                "new accounts need a token so a later eviction can be restored");
+        }
+    }
+
+    @Test
+    void upgradeBackfillsAccountTokenAndCreatesArchiveTable() throws Exception {
+        Path database = temporaryDirectory.resolve("v3-upgrade.db");
+        createLegacyDatabase(database, "PREMIUM");
+        try (Connection connection = open(database); Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                CREATE TABLE authme (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username VARCHAR(255) NOT NULL UNIQUE,
+                    password VARCHAR(255) NOT NULL,
+                    regdate BIGINT NOT NULL,
+                    realname VARCHAR(255) NOT NULL DEFAULT 'Player'
+                )
+                """);
+            statement.executeUpdate("INSERT INTO authme (username, password, regdate, realname) "
+                + "VALUES ('oldguy', 'hash', 42, 'OldGuy')");
+        }
+
+        String token;
+        try (Storage storage = new Storage(database); Connection connection = open(database)) {
+            assertTrue(hasColumn(database, "authme", "account_token"));
+            assertTrue(hasTable(database, "evicted_accounts"));
+            token = authmeString(connection, "oldguy", "account_token");
+            assertTrue(token != null && !token.isBlank());
+            assertEquals(token, java.util.UUID.fromString(token).toString(),
+                "the backfilled token must be a random UUID");
+            assertEquals(3, userVersion(database));
+        }
+        try (Storage second = new Storage(database); Connection connection = open(database)) {
+            assertEquals(token, authmeString(connection, "oldguy", "account_token"),
+                "a second startup must not overwrite the token");
+        }
+        assertEquals(1, backups(database).size(), "a second startup must not take another backup");
+    }
+
+    private static void insertAuthme(Connection connection, String name, String password, long regdate,
+                                     String realname, String token) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement("""
+            INSERT INTO authme (username, password, regdate, realname, playerUUID, account_token)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """)) {
+            statement.setString(1, name.toLowerCase(java.util.Locale.ROOT));
+            statement.setString(2, password);
+            statement.setLong(3, regdate);
+            statement.setString(4, realname);
+            statement.setString(5, offlineUuid(name));
+            statement.setString(6, token);
+            statement.executeUpdate();
+        }
+    }
+
+    private static String offlineUuid(String name) {
+        return java.util.UUID.nameUUIDFromBytes(
+            ("OfflinePlayer:" + name).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+    }
+
+    private static String authmeString(Connection connection, String name, String column) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT " + column + " FROM authme WHERE username = ? COLLATE NOCASE")) {
+            statement.setString(1, name);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getString(1) : null;
+            }
+        }
+    }
+
+    private static long authmeRegdate(Connection connection, String name) throws SQLException {
+        try (PreparedStatement statement = connection.prepareStatement(
+            "SELECT regdate FROM authme WHERE username = ? COLLATE NOCASE")) {
+            statement.setString(1, name);
+            try (ResultSet result = statement.executeQuery()) {
+                return result.next() ? result.getLong(1) : -1L;
+            }
+        }
+    }
+
+    private static int countEvicted(Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet result = statement.executeQuery("SELECT COUNT(*) FROM evicted_accounts")) {
+            return result.next() ? result.getInt(1) : 0;
         }
     }
 
