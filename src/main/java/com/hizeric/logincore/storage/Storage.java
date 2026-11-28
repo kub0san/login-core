@@ -544,6 +544,7 @@ public final class Storage implements AutoCloseable {
 
                 // Evict a squatter, preserving its account data for a later restore.
                 long now = Instant.now().toEpochMilli();
+                int archived;
                 try (PreparedStatement statement = connection.prepareStatement("""
                     INSERT INTO evicted_accounts
                         (token, old_username, password, regdate, realname, evicted_at, reason)
@@ -552,17 +553,19 @@ public final class Storage implements AutoCloseable {
                     """)) {
                     statement.setLong(1, now);
                     statement.setString(2, newKey);
-                    statement.executeUpdate();
+                    archived = statement.executeUpdate();
                 }
-                try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM authme WHERE username = ? COLLATE NOCASE")) {
-                    statement.setString(1, newKey);
-                    statement.executeUpdate();
-                }
-                try (PreparedStatement statement = connection.prepareStatement(
-                    "DELETE FROM account_classification WHERE name_lower = ?")) {
-                    statement.setString(1, newKey);
-                    statement.executeUpdate();
+                if (archived > 0) {
+                    try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM authme WHERE username = ? COLLATE NOCASE")) {
+                        statement.setString(1, newKey);
+                        statement.executeUpdate();
+                    }
+                    try (PreparedStatement statement = connection.prepareStatement(
+                        "DELETE FROM account_classification WHERE name_lower = ?")) {
+                        statement.setString(1, newKey);
+                        statement.executeUpdate();
+                    }
                 }
 
                 // Write the premium identity. The old link is already gone, so the UUID is free.

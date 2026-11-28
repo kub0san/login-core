@@ -408,7 +408,7 @@ class StorageTest {
     }
 
     @Test
-    void renameRollsBackEverythingOnUuidConflict() throws Exception {
+    void renameRollsBackEverythingOnEvictedTokenConflict() throws Exception {
         Path database = temporaryDirectory.resolve("rename-rollback.db");
         try (Storage storage = new Storage(database);
              Connection connection = open(database);
