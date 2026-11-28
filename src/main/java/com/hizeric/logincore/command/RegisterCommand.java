@@ -2,6 +2,7 @@ package com.hizeric.logincore.command;
 
 import com.hizeric.logincore.events.RegisterEvent;
 import com.hizeric.logincore.mojang.LookupResult;
+import com.hizeric.logincore.session.AccountCookie;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.storage.Storage;
 import net.kyori.adventure.text.minimessage.MiniMessage;
@@ -25,6 +26,7 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
     private final Executor workers;
     private final Storage storage;
     private final AuthState authState;
+    private final AccountCookie accountCookie;
     private final String mode;
     private final BiFunction<String, String, LookupResult> nameLookup;
     private final MiniMessage miniMessage = MiniMessage.miniMessage();
@@ -35,6 +37,7 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
         this.workers = workers;
         this.storage = storage;
         this.authState = authState;
+        this.accountCookie = new AccountCookie(plugin);
         this.mode = mode;
         this.nameLookup = nameLookup;
     }
@@ -90,6 +93,7 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
                 return;
             }
             storage.setLoggedIn(name).get();
+            storeAccountCookie(player);
             onMain(() -> {
                 authState.authenticate(name);
                 plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
@@ -97,6 +101,30 @@ public final class RegisterCommand implements CommandExecutor, TabCompleter {
             });
         } catch (Exception ex) {
             onMain(() -> message(sender, "<red>Registration failed: " + ex.getMessage()));
+        }
+    }
+
+    /** Best-effort: a missing token or cookie failure must never fail registration. */
+    private void storeAccountCookie(Player player) {
+        try {
+            storage.authmeToken(player.getName()).whenComplete((found, error) -> {
+                if (error != null || found == null || found.isEmpty()) {
+                    return;
+                }
+                String token = found.get();
+                if (token == null || token.isBlank()) {
+                    return;
+                }
+                onMain(() -> {
+                    try {
+                        accountCookie.store(player, token);
+                    } catch (RuntimeException ex) {
+                        plugin.getLogger().warning("Could not store account cookie: " + ex.getMessage());
+                    }
+                });
+            });
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not look up account token: " + ex.getMessage());
         }
     }
 

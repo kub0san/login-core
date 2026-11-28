@@ -259,6 +259,22 @@ public final class Storage implements AutoCloseable {
         });
     }
 
+    /** Reads the stable account token; empty when the name or its token is missing. */
+    public CompletableFuture<Optional<String>> authmeToken(String name) {
+        if (name == null || name.isBlank()) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        return submit(() -> {
+            try (PreparedStatement statement = connection.prepareStatement(
+                "SELECT account_token FROM authme WHERE username = ? COLLATE NOCASE")) {
+                statement.setString(1, normalize(name));
+                try (ResultSet result = statement.executeQuery()) {
+                    return result.next() ? Optional.ofNullable(result.getString(1)) : Optional.empty();
+                }
+            }
+        });
+    }
+
     /** True when an authme row exists for the name, case-insensitively. */
     public CompletableFuture<Boolean> isRegistered(String name) {
         if (name == null || name.isBlank()) {

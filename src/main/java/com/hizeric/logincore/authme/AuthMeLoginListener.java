@@ -3,6 +3,7 @@ package com.hizeric.logincore.authme;
 import com.hizeric.logincore.events.LoginEvent;
 import com.hizeric.logincore.events.RegisterEvent;
 import com.hizeric.logincore.mojang.MojangClient;
+import com.hizeric.logincore.session.AccountCookie;
 import com.hizeric.logincore.session.AuthState;
 import com.hizeric.logincore.session.VerifiedSessions;
 import com.hizeric.logincore.session.VerifiedSessions.VerifiedSession;
@@ -37,6 +38,7 @@ public final class AuthMeLoginListener implements Listener {
 
     private final Plugin plugin;
     private final AuthState authState;
+    private final AccountCookie accountCookie;
     private final Storage storage;
     private final VerifiedSessions verifiedSessions;
     private final Consumer<String> onVerifiedLogin;
@@ -83,6 +85,7 @@ public final class AuthMeLoginListener implements Listener {
                         BiPredicate<String, InetAddress> isBanned, Consumer<Runnable> onMain) {
         this.plugin = plugin;
         this.authState = authState;
+        this.accountCookie = new AccountCookie(plugin);
         this.storage = storage;
         this.verifiedSessions = verifiedSessions;
         this.onVerifiedLogin = onVerifiedLogin;
@@ -246,6 +249,7 @@ public final class AuthMeLoginListener implements Listener {
                     return CommitResult.RENAME_CONFLICT;
                 }
             }
+            // TODO: store cookie (Phase 4) — premium auto-login commits before a Player exists.
             return storage.commitPremiumIdentity(session.name(), mojangUuid,
                 session.mojangSession().canonicalName(), session.linkSource()).join()
                 ? CommitResult.COMMITTED : CommitResult.CONFLICT;
@@ -273,6 +277,7 @@ public final class AuthMeLoginListener implements Listener {
             return;
         }
         if (registered) {
+            storeAccountCookie(player);
             plugin.getServer().getPluginManager().callEvent(new RegisterEvent(player));
             plugin.getServer().getPluginManager().callEvent(new LoginEvent(player));
             return;
@@ -298,6 +303,7 @@ public final class AuthMeLoginListener implements Listener {
         }
         Optional<VerifiedSession> pending = verifiedSessions.consume(player.getName(), player.getAddress());
         if (pending.isEmpty()) {
+            storeAccountCookie(player);
             onMain.accept(() -> plugin.getServer().getPluginManager().callEvent(new LoginEvent(player)));
             return true;
         }
@@ -315,10 +321,35 @@ public final class AuthMeLoginListener implements Listener {
             onMain.accept(() -> authState.logout(player.getName()));
             return false;
         }
+        storeAccountCookie(player);
         onMain.accept(() -> authState.authenticate(player.getName()));
         onMain.accept(() -> onVerifiedLogin.accept(session.connectionId()));
         onMain.accept(() -> plugin.getServer().getPluginManager().callEvent(new LoginEvent(player)));
         return true;
+    }
+
+    /** Best-effort: a missing token or cookie failure must never fail authentication. */
+    private void storeAccountCookie(Player player) {
+        try {
+            storage.authmeToken(player.getName()).whenComplete((found, error) -> {
+                if (error != null || found == null || found.isEmpty()) {
+                    return;
+                }
+                String token = found.get();
+                if (token == null || token.isBlank()) {
+                    return;
+                }
+                onMain.accept(() -> {
+                    try {
+                        accountCookie.store(player, token);
+                    } catch (RuntimeException ex) {
+                        plugin.getLogger().warning("Could not store account cookie: " + ex.getMessage());
+                    }
+                });
+            });
+        } catch (RuntimeException ex) {
+            plugin.getLogger().warning("Could not look up account token: " + ex.getMessage());
+        }
     }
 
     private enum CommitResult { COMMITTED, CONFLICT, RENAME_CONFLICT }
