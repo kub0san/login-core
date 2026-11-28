@@ -48,7 +48,7 @@ public final class AccountDialogs {
         }
     }
 
-    public static Dialog buildRegisterDialog(Plugin plugin) {
+    public static Dialog buildRegisterDialog() {
         DialogBase base = DialogBase.builder(Component.text("Register"))
             .inputs(List.of(
                 DialogInput.text("password", Component.text("Password")).maxLength(100).build(),
@@ -61,7 +61,7 @@ public final class AccountDialogs {
         return create(base, "Register", "register $(password) $(confirm)");
     }
 
-    public static Dialog buildLoginDialog(Plugin plugin) {
+    public static Dialog buildLoginDialog() {
         DialogBase base = DialogBase.builder(Component.text("Login"))
             .inputs(List.of(DialogInput.text("password", Component.text("Password")).maxLength(100).build()))
             .body(List.of(DialogBody.plainMessage(

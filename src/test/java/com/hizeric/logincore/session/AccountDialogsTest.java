@@ -17,7 +17,7 @@ class AccountDialogsTest {
     void buildsBothDialogsWhenApiIsPresent() {
         assumeTrue(AccountDialogs.isSupported(), "Paper dialog API is not on the classpath");
         assumeTrue(AccountDialogs.canBuild(), "Dialog provider is installed only on a running Paper server");
-        assertNotNull(AccountDialogs.buildRegisterDialog(null));
-        assertNotNull(AccountDialogs.buildLoginDialog(null));
+        assertNotNull(AccountDialogs.buildRegisterDialog());
+        assertNotNull(AccountDialogs.buildLoginDialog());
     }
 }

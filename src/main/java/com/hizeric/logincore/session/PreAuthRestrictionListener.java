@@ -143,16 +143,16 @@ public final class PreAuthRestrictionListener implements Listener {
                 try {
                     String archivedToken = token == null || token.isBlank() ? null : token;
                     if (archivedToken != null && storage.findEvicted(archivedToken).join().isPresent()) {
-                        Storage.RestoreResult result = storage.restoreEvicted(archivedToken, player.getName()).join();
+                        Storage.RestoreResult result = storage.restoreEvicted(archivedToken, name).join();
                         if (result == Storage.RestoreResult.RESTORED) {
-                            plugin.getLogger().info("restored evicted account for " + player.getName());
+                            plugin.getLogger().info("restored evicted account for " + name);
                         } else if (result == Storage.RestoreResult.COLLISION) {
                             // Another account owns the name: keep the evicted row untouched.
-                            plugin.getLogger().warning("Account restore for " + player.getName()
+                            plugin.getLogger().warning("Account restore for " + name
                                 + " collided; the archived account was kept.");
                         }
                     }
-                    boolean registered = Boolean.TRUE.equals(storage.isRegistered(player.getName()).join());
+                    boolean registered = Boolean.TRUE.equals(storage.isRegistered(name).join());
                     showPrompt(player, name, registered);
                 } catch (RuntimeException ex) {
                     plugin.getLogger().warning("Could not restore account for " + name + ": " + ex.getMessage());
@@ -164,7 +164,7 @@ public final class PreAuthRestrictionListener implements Listener {
     }
 
     private void showPrompt(Player player, String name, boolean registered) {
-        if (!AccountDialogs.isSupported()) {
+        if (!AccountDialogs.isSupported() || !AccountDialogs.canBuild() || !AccountDialogs.canShow()) {
             return;
         }
         onMain(() -> {
@@ -173,8 +173,8 @@ public final class PreAuthRestrictionListener implements Listener {
                     return;
                 }
                 var dialog = registered
-                    ? AccountDialogs.buildLoginDialog(plugin)
-                    : AccountDialogs.buildRegisterDialog(plugin);
+                    ? AccountDialogs.buildLoginDialog()
+                    : AccountDialogs.buildRegisterDialog();
                 AccountDialogs.show(player, dialog);
             } catch (RuntimeException ex) {
                 plugin.getLogger().warning("Could not show account dialog for " + name + ": " + ex.getMessage());
